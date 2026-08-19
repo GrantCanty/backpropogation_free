@@ -132,3 +132,59 @@ class RLSReadout(FrozenReadout):
     @property
     def state_nbytes(self) -> int:
         return self.weights.nbytes + self.inverse_correlation.nbytes
+
+
+@dataclass
+class FastSlowLMSReadout:
+    """Online readout with quickly adapting and slowly consolidated weights."""
+
+    input_size: int
+    output_size: int
+    seed: int = 0
+    learning_rate: float = 0.15
+    fast_decay: float = 0.995
+    consolidation_rate: float = 0.002
+    epsilon: float = 1e-6
+    update_clip: float | None = 1.0
+
+    def __post_init__(self) -> None:
+        if not 0.0 <= self.fast_decay <= 1.0:
+            raise ValueError("fast_decay must be in [0, 1]")
+        if not 0.0 <= self.consolidation_rate <= 1.0:
+            raise ValueError("consolidation_rate must be in [0, 1]")
+        self.slow_weights = np.zeros(
+            (self.output_size, self.input_size), dtype=np.float64
+        )
+        self.fast_weights = np.zeros_like(self.slow_weights)
+
+    @property
+    def weights(self) -> FloatArray:
+        return self.slow_weights + self.fast_weights
+
+    def predict(self, features: FloatArray) -> FloatArray:
+        features = _validate_vector("features", features, self.input_size)
+        return self.weights @ features
+
+    def update(
+        self,
+        features: FloatArray,
+        target: FloatArray,
+        prediction: FloatArray,
+    ) -> None:
+        features = _validate_vector("features", features, self.input_size)
+        target = _validate_vector("target", target, self.output_size)
+        prediction = _validate_vector("prediction", prediction, self.output_size)
+        self.fast_weights *= self.fast_decay
+        error = target - prediction
+        scale = self.learning_rate / (self.epsilon + float(features @ features))
+        update = scale * np.outer(error, features)
+        if self.update_clip is not None:
+            update = np.clip(update, -self.update_clip, self.update_clip)
+        self.fast_weights += update
+        transfer = self.consolidation_rate * self.fast_weights
+        self.slow_weights += transfer
+        self.fast_weights -= transfer
+
+    @property
+    def state_nbytes(self) -> int:
+        return self.slow_weights.nbytes + self.fast_weights.nbytes

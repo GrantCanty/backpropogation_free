@@ -65,3 +65,22 @@ class PrequentialMetrics:
                 }
             )
         return summaries
+
+    def rolling_mse(
+        self, window: int = 100, stride: int = 10
+    ) -> list[dict[str, float | int]]:
+        if window <= 0 or stride <= 0:
+            raise ValueError("window and stride must be positive")
+        errors = np.asarray(self.squared_errors, dtype=np.float64)
+        if len(errors) == 0:
+            return []
+        points: list[dict[str, float | int]] = []
+        for stop in range(1, len(errors) + 1, stride):
+            start = max(0, stop - window)
+            points.append({"step": stop, "mse": float(np.mean(errors[start:stop]))})
+        if points[-1]["step"] != len(errors):
+            start = max(0, len(errors) - window)
+            points.append(
+                {"step": len(errors), "mse": float(np.mean(errors[start:]))}
+            )
+        return points

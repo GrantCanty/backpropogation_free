@@ -121,3 +121,61 @@ def iter_delayed_association(
             regime=episode,
         )
         step += 1
+
+
+@dataclass(frozen=True)
+class ContinualClassificationConfig:
+    steps: int = 4_000
+    context_length: int = 1_000
+    input_size: int = 8
+    classes: int = 3
+    contexts: tuple[int, ...] = (0, 1, 2, 0)
+    noise_std: float = 0.28
+    seed: int = 0
+
+
+def iter_continual_classification(
+    config: ContinualClassificationConfig,
+) -> Iterator[StreamEvent]:
+    """Yield changing classification contexts without exposing boundaries.
+
+    Context zero returns at the end, allowing retention to be measured without
+    retaining any old samples inside the learner.
+    """
+
+    if config.steps <= 0 or config.context_length <= 1:
+        raise ValueError("steps and context_length must be positive")
+    if config.input_size < config.classes or config.classes < 2:
+        raise ValueError("input_size must cover at least two classes")
+    if not config.contexts:
+        raise ValueError("at least one context is required")
+
+    rng = np.random.default_rng(config.seed)
+    prototypes = rng.normal(size=(config.classes, config.input_size))
+    prototypes /= np.linalg.norm(prototypes, axis=1, keepdims=True)
+    transforms: dict[int, np.ndarray] = {}
+    shifts: dict[int, np.ndarray] = {}
+    for context in set(config.contexts):
+        matrix = rng.normal(size=(config.input_size, config.input_size))
+        orthogonal, _ = np.linalg.qr(matrix)
+        transforms[context] = orthogonal
+        shifts[context] = rng.normal(0.0, 0.2, size=config.input_size)
+
+    previous_context: int | None = None
+    for step in range(config.steps):
+        segment = (step // config.context_length) % len(config.contexts)
+        context = config.contexts[segment]
+        class_index = int(rng.integers(config.classes))
+        observation = transforms[context] @ prototypes[class_index]
+        observation += shifts[context]
+        observation += rng.normal(0.0, config.noise_std, size=config.input_size)
+        target = np.zeros(config.classes, dtype=np.float64)
+        target[class_index] = 1.0
+        yield StreamEvent(
+            step=step,
+            observation=np.asarray(observation, dtype=np.float64),
+            target=target,
+            regime=context,
+            change_point=previous_context is not None and context != previous_context,
+        )
+        previous_context = context
