@@ -11,3 +11,13 @@ def test_core_has_no_automatic_differentiation_dependencies() -> None:
             if token in text:
                 violations.append(f"{path.name}: {token}")
     assert not violations, violations
+
+
+def test_core_does_not_import_comparison_baselines() -> None:
+    root = Path(__file__).parents[1] / "src" / "no_backprop"
+    violations = [
+        path.name
+        for path in root.glob("*.py")
+        if "baselines" in path.read_text().lower()
+    ]
+    assert not violations, violations
