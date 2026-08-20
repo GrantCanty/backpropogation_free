@@ -16,6 +16,7 @@ from no_backprop.readouts import (
     DiagonalRLSReadout,
     FastSlowLMSReadout,
     KeyValueMaturityReadout,
+    ProbationaryMaturityReadout,
     ProtectedFastSlowReadout,
     PrototypeReadout,
     RLSReadout,
@@ -72,6 +73,20 @@ def save_checkpoint(learner: OnlineReservoir, destination: str | Path) -> Path:
         if isinstance(learner.readout, KeyValueMaturityReadout):
             for name in ("key_weight", "key_m2", "key_variance"):
                 arrays[f"readout_maturity_{name}"] = getattr(
+                    learner.readout, name
+                )
+        if isinstance(learner.readout, ProbationaryMaturityReadout):
+            probation_names = (
+                "candidate_centers",
+                "candidate_counts",
+                "candidate_labels",
+                "candidate_active",
+                "candidates_created",
+                "candidates_promoted",
+                "candidate_pool_rejections",
+            )
+            for name in probation_names:
+                arrays[f"readout_probation_{name}"] = getattr(
                     learner.readout, name
                 )
     elif isinstance(learner.readout, CumulativeMemoryReadout):
@@ -178,6 +193,23 @@ def restore_checkpoint(learner: OnlineReservoir, source: str | Path) -> None:
             if isinstance(learner.readout, KeyValueMaturityReadout):
                 for name in ("key_weight", "key_m2", "key_variance"):
                     checkpoint_name = f"readout_maturity_{name}"
+                    _copy_array(
+                        getattr(learner.readout, name),
+                        arrays[checkpoint_name],
+                        checkpoint_name,
+                    )
+            if isinstance(learner.readout, ProbationaryMaturityReadout):
+                probation_names = (
+                    "candidate_centers",
+                    "candidate_counts",
+                    "candidate_labels",
+                    "candidate_active",
+                    "candidates_created",
+                    "candidates_promoted",
+                    "candidate_pool_rejections",
+                )
+                for name in probation_names:
+                    checkpoint_name = f"readout_probation_{name}"
                     _copy_array(
                         getattr(learner.readout, name),
                         arrays[checkpoint_name],

@@ -13,6 +13,7 @@ from no_backprop.experiment import (
 from no_backprop.readouts import (
     CumulativeMaturityReadout,
     KeyValueMaturityReadout,
+    ProbationaryMaturityReadout,
     _normalized_entropy,
 )
 
@@ -44,7 +45,11 @@ def test_maturity_without_neurons_matches_batch_ridge() -> None:
 
 
 def test_maturity_models_have_no_forgetting_or_decay_parameter() -> None:
-    for readout_class in (CumulativeMaturityReadout, KeyValueMaturityReadout):
+    for readout_class in (
+        CumulativeMaturityReadout,
+        KeyValueMaturityReadout,
+        ProbationaryMaturityReadout,
+    ):
         fields = readout_class.__dataclass_fields__
         assert "forgetting_factor" not in fields
         assert "decay" not in fields
@@ -112,6 +117,42 @@ def test_leverage_gate_waits_until_an_error_region_is_familiar() -> None:
     assert 0.0 < readout.diagnostics["mean_normalized_leverage"] < 1.0
 
 
+def test_probation_requires_confirmation_then_freezes_key() -> None:
+    readout = ProbationaryMaturityReadout(2, 2, max_neurons=1)
+    familiar_target = np.array([1.0, 0.0])
+    changed_target = np.array([0.0, 1.0])
+    feature = np.array([1.0, 0.0])
+
+    for _ in range(4):
+        prediction = readout.predict(feature)
+        readout.update(feature, familiar_target, prediction)
+
+    prediction = readout.predict(feature)
+    readout.update(feature, changed_target, prediction)
+    assert readout.diagnostics["active_neurons"] == 0
+    assert readout.diagnostics["pending_candidates"] == 1
+
+    # Confirmation is about persistent labeled structure, not a second error.
+    readout.expanded_weights.fill(0.0)
+    readout.expanded_weights[1, 0] = 1.0
+    confirmation = np.array([1.0, 0.02])
+    prediction = readout.predict(confirmation)
+    assert int(np.argmax(prediction)) == 1
+    readout.update(confirmation, changed_target, prediction)
+    assert readout.diagnostics["active_neurons"] == 1
+    assert readout.diagnostics["pending_candidates"] == 0
+    assert readout.diagnostics["candidates_promoted"] == 1
+    np.testing.assert_allclose(readout.neuron_centers[0], [1.0, 0.01])
+
+    frozen_center = readout.neuron_centers.copy()
+    nearby = np.array([1.0, 0.015])
+    prediction = readout.predict(nearby)
+    readout.update(nearby, changed_target, prediction)
+    np.testing.assert_array_equal(readout.neuron_centers, frozen_center)
+    assert readout.diagnostics["active_keys_are_frozen"]
+    assert readout.diagnostics["stored_raw_samples"] == 0
+
+
 def test_recruited_neuron_accumulates_maturity_evidence() -> None:
     readout = CumulativeMaturityReadout(
         2, 2, max_neurons=2, min_center_distance=0.01
@@ -139,6 +180,7 @@ def test_maturity_variants_run_locked_with_bounded_capacity() -> None:
         "maturity",
         "maturity_entropy",
         "maturity_leverage",
+        "maturity_probation",
         "key_value",
         "key_value_entropy",
     ):
@@ -252,3 +294,24 @@ def test_key_value_checkpoint_round_trip(tmp_path) -> None:
     np.testing.assert_allclose(
         restored.readout.neuron_centers, learner.readout.neuron_centers
     )
+
+
+def test_probation_checkpoint_round_trip(tmp_path) -> None:
+    config = DigitsExperimentConfig(
+        hidden_size=8, seed=13, maturity_max_neurons=4
+    )
+    learner = build_digits_learner("maturity_probation", config)
+    rng = np.random.default_rng(13)
+    for label in (6, 2, 6, 4, 2):
+        _process_digit_image(
+            learner, rng.uniform(size=(8, 8)), target=_digit_target(label)
+        )
+    path = save_checkpoint(learner, tmp_path / "probation.npz")
+    evaluation_image = rng.uniform(size=(8, 8))
+    expected = _process_digit_image(learner, evaluation_image, target=None)
+
+    restored = build_digits_learner("maturity_probation", config)
+    restore_checkpoint(restored, path)
+    actual = _process_digit_image(restored, evaluation_image, target=None)
+    np.testing.assert_allclose(actual, expected)
+    assert restored.readout.diagnostics == learner.readout.diagnostics

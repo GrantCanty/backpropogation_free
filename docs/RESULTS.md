@@ -468,6 +468,46 @@ of approximately +0.02 to +0.74 points; inverted performance is unchanged.
 This supports leverage as a modestly better recruitment default, not as a major
 adaptation breakthrough.
 
+### Probationary frozen-key experiment
+
+Probation separates learning a key from using it. A leverage-qualified error
+creates a dormant candidate that cannot affect prediction or RLS statistics. A
+later nearby observation with the same label confirms the proposal; their
+cumulative centroid becomes an active RBF key and is then immutable. The
+confirming observation immediately trains the newly exposed coordinate. There
+is one structural rule—proposal plus confirmation—but no promotion score,
+decay, raw-sample buffer, or moving active basis.
+
+An initial sanity design required the confirmation itself to be another error.
+That stranded all 32 candidate slots and promoted only 7–18 keys on the three
+original seeds. The final design accepts any later nearby same-label
+observation as evidence that the proposed region persists. This rule was then
+frozen before the 10-seed comparison.
+
+| Model | Shuffled online | Shuffled final | Ordered online | Ordered final | Ordered forgetting | State |
+|---|---:|---:|---:|---:|---:|---:|
+| Leverage, immediate key | 85.29% | 90.95% | 77.24% | **90.78%** | **3.73 points** | 135.4 KB |
+| Leverage + probation | **85.74%** | **90.98%** | **77.72%** | 90.58% | 3.98 points | 152.4 KB |
+
+Probation improves shuffled online accuracy by 0.45 points with a nominal
+paired 95% interval of +0.04 to +0.87, and ordered online by 0.47 points with an
+interval of +0.24 to +0.71. Shuffled final changes by +0.03 points and ordered
+final by -0.20; both intervals cross zero. Ordered forgetting changes by +0.25
+points and is also inconclusive. Runtime is unchanged within measurement noise.
+
+Both variants eventually activate all 32 keys. Probation creates 60.6
+candidates on average shuffled and 45.0 ordered, finishing with 28.6 and 13.0
+dormant candidates respectively. The shuffled candidate pool rejects 17.6
+additional proposals on average; the ordered pool rejects none. Its fixed-size
+candidate bank raises state by 12.6%, from 135.4 to 152.4 KB.
+
+On original/inverted/original drift, probation changes performance after
+inversion by -0.10 points original and +0.30 inverted. Final performance changes
+by -0.13 points original and -0.03 inverted. Every paired interval crosses
+zero, so there is no detected drift benefit or stability regression. The result
+is specifically a modest improvement in online sample efficiency: averaging a
+confirmed key is better than exposing the first qualifying error immediately.
+
 ### Adaptive key-value neuron experiment
 
 The attention-inspired variant keeps the same single output path but makes each
@@ -557,6 +597,8 @@ calibrate predictive uncertainty, and scale the neuron bank.
   computes entropy from uncalibrated scores.
 - The threshold-free leverage gate delays poor recruitment but still fills all
   32 slots, so it does not address long-run capacity allocation.
+- Probation improves online accuracy without improving final accuracy. Its
+  candidate bank adds 12.6% state and can accumulate stranded proposals.
 - Adaptive keys introduce nonlinear basis drift, add 24% state and about 6%
   NumPy CPU time, and have only a small three-seed adaptation gain.
 - Past observations have no counterfactual activations for neurons recruited
@@ -564,6 +606,6 @@ calibrate predictive uncertainty, and scale the neuron bank.
   replay, but does not provide a formal non-interference guarantee.
 
 The next mechanism experiment should keep the cumulative single-path invariant
-while correcting or avoiding adaptive-key basis drift with probationary frozen
-keys. A capacity-width scaling study should precede learned or expanding
-encoders.
+while testing local responsibility so overlapping neurons do not all respond to
+the same observation. A capacity-width scaling study should precede learned or
+expanding encoders.

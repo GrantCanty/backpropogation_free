@@ -35,6 +35,7 @@ class FactorFreeMemoryConfig:
         "maturity",
         "maturity_entropy",
         "maturity_leverage",
+        "maturity_probation",
         "key_value",
         "key_value_entropy",
         "rls",
@@ -101,6 +102,9 @@ def run_factor_free_drift(config: FactorFreeMemoryConfig) -> dict[str, Any]:
             "maturity_leverage": run_drift_model(
                 "maturity_leverage", milestone_config
             ),
+            "maturity_probation": run_drift_model(
+                "maturity_probation", milestone_config
+            ),
             "key_value": run_drift_model("key_value", milestone_config),
             "key_value_entropy": run_drift_model(
                 "key_value_entropy", milestone_config
@@ -138,9 +142,16 @@ def run_factor_free_memory(
             "maturity",
             "maturity_entropy",
             "maturity_leverage",
+            "maturity_probation",
             "key_value",
             "key_value_entropy",
         )
+    ]
+    probation_runs = [
+        model
+        for models in quality.values()
+        for kind, model in models.items()
+        if kind == "maturity_probation"
     ]
     return {
         "experiment": "factor_free_cumulative_representation_memory",
@@ -169,6 +180,10 @@ def run_factor_free_memory(
             "maturity_models_store_raw_samples": any(
                 run["maturity_diagnostics"]["stored_raw_samples"]
                 for run in maturity_runs
+            ),
+            "probation_active_keys_are_frozen": all(
+                run["maturity_diagnostics"]["active_keys_are_frozen"]
+                for run in probation_runs
             ),
         },
         "quality": quality,

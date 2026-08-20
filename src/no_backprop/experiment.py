@@ -29,6 +29,7 @@ from no_backprop.readouts import (
     FrozenReadout,
     KeyValueMaturityReadout,
     LMSReadout,
+    ProbationaryMaturityReadout,
     ProtectedFastSlowReadout,
     PrototypeReadout,
     RLSReadout,
@@ -436,6 +437,7 @@ DigitsKind = Literal[
     "maturity",
     "maturity_entropy",
     "maturity_leverage",
+    "maturity_probation",
     "key_value",
     "key_value_entropy",
 ]
@@ -512,6 +514,16 @@ def build_digits_learner(
             min_center_distance=config.maturity_min_center_distance,
             entropy_gated=kind == "maturity_entropy",
             leverage_gated=kind == "maturity_leverage",
+        )
+    elif kind == "maturity_probation":
+        readout = ProbationaryMaturityReadout(
+            feature_size,
+            10,
+            seed=config.seed,
+            regularization=config.cumulative_regularization,
+            max_neurons=config.maturity_max_neurons,
+            rbf_width=config.maturity_rbf_width,
+            min_center_distance=config.maturity_min_center_distance,
         )
     elif kind in ("key_value", "key_value_entropy"):
         readout = KeyValueMaturityReadout(
@@ -638,6 +650,18 @@ def _learner_training_arrays(learner: OnlineReservoir) -> tuple[np.ndarray, ...]
                     learner.readout.key_weight,
                     learner.readout.key_m2,
                     learner.readout.key_variance,
+                ]
+            )
+        if isinstance(learner.readout, ProbationaryMaturityReadout):
+            arrays.extend(
+                [
+                    learner.readout.candidate_centers,
+                    learner.readout.candidate_counts,
+                    learner.readout.candidate_labels,
+                    learner.readout.candidate_active,
+                    learner.readout.candidates_created,
+                    learner.readout.candidates_promoted,
+                    learner.readout.candidate_pool_rejections,
                 ]
             )
     elif isinstance(learner.readout, CumulativeMemoryReadout):

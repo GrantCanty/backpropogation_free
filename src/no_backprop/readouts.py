@@ -713,13 +713,21 @@ class CumulativeMaturityReadout:
             and self._leverage_allows_recruitment()
         )
 
-    def _recruit(self, features: FloatArray, target_class: int) -> None:
+    def _recruit(self, features: FloatArray, target_class: int) -> bool:
         index = int(self.active_count[0])
         self.neuron_centers[index] = features
         self.neuron_active[index] = 1.0
         self.neuron_labels[index] = float(target_class)
         self.neuron_recruitment_entropy[index] = self._last_entropy
         self.active_count[0] += 1.0
+        return True
+
+    def _prepare_representation_update(
+        self, features: FloatArray, target_class: int
+    ) -> bool:
+        """Allow a subclass to activate prepared features before learning."""
+
+        return False
 
     def update(
         self,
@@ -740,8 +748,12 @@ class CumulativeMaturityReadout:
         projected = self.inverse_correlation @ self._last_expanded
         leverage = max(0.0, float(self._last_expanded @ projected))
         self._last_normalized_leverage = leverage / (1.0 + leverage)
-        active_before_update = int(self.active_count[0])
         target_class = int(np.argmax(target))
+        prepared = self._prepare_representation_update(features, target_class)
+        if prepared:
+            self._last_expanded = self._expanded_features(features)
+            projected = self.inverse_correlation @ self._last_expanded
+        active_before_update = int(self.active_count[0])
         predicted_class = int(np.argmax(self._last_prediction))
         correct = target_class == predicted_class
         if correct:
@@ -754,10 +766,11 @@ class CumulativeMaturityReadout:
             gate_allowed = self._gate_allows_recruitment()
             distinct = self._is_distinct(features)
             if capacity_available and gate_allowed and distinct:
-                self._recruit(features, target_class)
-                # The recruiting observation immediately trains the new unit.
-                self._last_expanded = self._expanded_features(features)
-                projected = self.inverse_correlation @ self._last_expanded
+                activated = self._recruit(features, target_class)
+                if activated:
+                    # The promoting observation immediately trains the unit.
+                    self._last_expanded = self._expanded_features(features)
+                    projected = self.inverse_correlation @ self._last_expanded
             elif capacity_available and not gate_allowed and self.entropy_gated:
                 self.entropy_rejection_count[0] += 1.0
             elif capacity_available and not gate_allowed and self.leverage_gated:
@@ -865,6 +878,127 @@ class CumulativeMaturityReadout:
 
 
 @dataclass
+class ProbationaryMaturityReadout(CumulativeMaturityReadout):
+    """Leverage-gated local neurons that learn before becoming immutable.
+
+    The first qualifying error creates a dormant candidate.  A later nearby
+    observation with the same target is its confirmation: their cumulative
+    centroid becomes an active key and is frozen permanently.  Dormant
+    candidates never participate in prediction, so no historical RLS statistic
+    is formed while a key is moving.
+    """
+
+    def __post_init__(self) -> None:
+        self.leverage_gated = True
+        super().__post_init__()
+        self.candidate_centers = np.zeros(
+            (self.max_neurons, self.input_size), dtype=np.float64
+        )
+        self.candidate_counts = np.zeros(self.max_neurons, dtype=np.float64)
+        self.candidate_labels = np.full(
+            self.max_neurons, -1.0, dtype=np.float64
+        )
+        self.candidate_active = np.zeros(self.max_neurons, dtype=np.float64)
+        self.candidates_created = np.zeros(1, dtype=np.float64)
+        self.candidates_promoted = np.zeros(1, dtype=np.float64)
+        self.candidate_pool_rejections = np.zeros(1, dtype=np.float64)
+
+    def _matching_candidate(
+        self, features: FloatArray, target_class: int
+    ) -> int | None:
+        eligible = np.flatnonzero(
+            (self.candidate_active > 0.0)
+            & (self.candidate_labels == float(target_class))
+        )
+        if len(eligible) == 0:
+            return None
+        distances = np.mean(
+            np.square(self.candidate_centers[eligible] - features), axis=1
+        )
+        nearest_position = int(np.argmin(distances))
+        if float(distances[nearest_position]) > self.min_center_distance:
+            return None
+        return int(eligible[nearest_position])
+
+    def _empty_candidate_slot(self) -> int | None:
+        available = np.flatnonzero(self.candidate_active == 0.0)
+        return None if len(available) == 0 else int(available[0])
+
+    def _clear_candidate(self, index: int) -> None:
+        self.candidate_centers[index].fill(0.0)
+        self.candidate_counts[index] = 0.0
+        self.candidate_labels[index] = -1.0
+        self.candidate_active[index] = 0.0
+
+    def _recruit(self, features: FloatArray, target_class: int) -> bool:
+        candidate_index = self._empty_candidate_slot()
+        if candidate_index is None:
+            self.candidate_pool_rejections[0] += 1.0
+            return False
+        self.candidate_centers[candidate_index] = features
+        self.candidate_counts[candidate_index] = 1.0
+        self.candidate_labels[candidate_index] = float(target_class)
+        self.candidate_active[candidate_index] = 1.0
+        self.candidates_created[0] += 1.0
+        return False
+
+    def _prepare_representation_update(
+        self, features: FloatArray, target_class: int
+    ) -> bool:
+        if int(self.active_count[0]) >= self.max_neurons:
+            return False
+        candidate_index = self._matching_candidate(features, target_class)
+        if candidate_index is None:
+            return False
+        old_count = self.candidate_counts[candidate_index]
+        new_count = old_count + 1.0
+        center = self.candidate_centers[candidate_index]
+        center += (features - center) / new_count
+        self.candidate_counts[candidate_index] = new_count
+        frozen_center = center.copy()
+        self._clear_candidate(candidate_index)
+        super()._recruit(frozen_center, target_class)
+        self.candidates_promoted[0] += 1.0
+        return True
+
+    @property
+    def diagnostics(self) -> dict[str, float | int | bool]:
+        result = super().diagnostics
+        pending = self.candidate_counts[self.candidate_active > 0.0]
+        result.update(
+            {
+                "probationary_keys": True,
+                "active_keys_are_frozen": True,
+                "pending_candidates": int(np.sum(self.candidate_active)),
+                "candidates_created": int(self.candidates_created[0]),
+                "candidates_promoted": int(self.candidates_promoted[0]),
+                "candidate_pool_rejections": int(
+                    self.candidate_pool_rejections[0]
+                ),
+                "mean_pending_candidate_evidence": (
+                    0.0 if len(pending) == 0 else float(np.mean(pending))
+                ),
+            }
+        )
+        return result
+
+    @property
+    def state_nbytes(self) -> int:
+        return super().state_nbytes + sum(
+            array.nbytes
+            for array in (
+                self.candidate_centers,
+                self.candidate_counts,
+                self.candidate_labels,
+                self.candidate_active,
+                self.candidates_created,
+                self.candidates_promoted,
+                self.candidate_pool_rejections,
+            )
+        )
+
+
+@dataclass
 class KeyValueMaturityReadout(CumulativeMaturityReadout):
     """Maturity network whose recruited keys and locality learn cumulatively.
 
@@ -914,9 +1048,9 @@ class KeyValueMaturityReadout(CumulativeMaturityReadout):
         activities[:count] = np.exp(-0.5 * scaled_distance)
         return activities
 
-    def _recruit(self, features: FloatArray, target_class: int) -> None:
+    def _recruit(self, features: FloatArray, target_class: int) -> bool:
         index = int(self.active_count[0])
-        super()._recruit(features, target_class)
+        activated = super()._recruit(features, target_class)
         initial_variance = float(
             np.clip(
                 self.rbf_width**2,
@@ -927,6 +1061,7 @@ class KeyValueMaturityReadout(CumulativeMaturityReadout):
         self.key_weight[index] = self.key_prior_strength
         self.key_m2[index].fill(initial_variance * self.key_prior_strength)
         self.key_variance[index].fill(initial_variance)
+        return activated
 
     def _update_neuron_statistics(
         self,

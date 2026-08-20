@@ -8,4 +8,5 @@ Milestone 6 quality and forgetting-factor defaults are in `milestone6.json`;
 the lazy 8x8/28x28 systems benchmark is in `scaling.json`.
 The factor-free complementary-memory defaults are in
 `factor_free_memory.json`; it includes fixed-key ungated, entropy-gated, and
-RLS-leverage-gated controls plus adaptive key-value maturity variants.
+RLS-leverage-gated controls, probationary frozen keys, and adaptive key-value
+maturity variants.
