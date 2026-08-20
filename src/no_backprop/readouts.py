@@ -712,6 +712,7 @@ class CumulativeMaturityReadout:
         ):
             raise RuntimeError("predict must be called before update")
 
+        active_before_update = int(self.active_count[0])
         target_class = int(np.argmax(target))
         predicted_class = int(np.argmax(self._last_prediction))
         correct = target_class == predicted_class
@@ -745,13 +746,25 @@ class CumulativeMaturityReadout:
         self.inverse_correlation = 0.5 * (
             self.inverse_correlation + self.inverse_correlation.T
         )
-        if self.max_neurons:
-            self.neuron_evidence += np.square(expanded[self.input_size :])
+        self._update_neuron_statistics(
+            features, expanded[self.input_size :], active_before_update
+        )
         self.sample_count[0] += 1.0
 
         self._last_features = None
         self._last_expanded = None
         self._last_prediction = None
+
+    def _update_neuron_statistics(
+        self,
+        features: FloatArray,
+        activities: FloatArray,
+        active_before_update: int,
+    ) -> None:
+        """Accumulate evidence; subclasses may also adapt receptive fields."""
+
+        if self.max_neurons:
+            self.neuron_evidence += np.square(activities)
 
     @property
     def diagnostics(self) -> dict[str, float | int | bool]:
@@ -805,6 +818,149 @@ class CumulativeMaturityReadout:
             self.proximity_rejection_count,
         )
         return sum(array.nbytes for array in arrays)
+
+
+@dataclass
+class KeyValueMaturityReadout(CumulativeMaturityReadout):
+    """Maturity network whose recruited keys and locality learn cumulatively.
+
+    Each local neuron is an unnormalized attention-like key/value pair.  Its
+    center is the key, diagonal variance defines key similarity, and its column
+    in ``expanded_weights`` is the value.  Soft activation-weighted Welford
+    statistics move developing keys and reduce movement as evidence grows.
+    """
+
+    key_prior_strength: float = 4.0
+    minimum_key_variance: float = 4e-4
+    maximum_key_variance: float = 3.6e-3
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.key_prior_strength <= 0.0:
+            raise ValueError("key_prior_strength must be positive")
+        if self.minimum_key_variance <= 0.0:
+            raise ValueError("minimum_key_variance must be positive")
+        if self.maximum_key_variance < self.minimum_key_variance:
+            raise ValueError(
+                "maximum_key_variance must be at least minimum_key_variance"
+            )
+        self.key_weight = np.zeros(self.max_neurons, dtype=np.float64)
+        self.key_m2 = np.zeros(
+            (self.max_neurons, self.input_size), dtype=np.float64
+        )
+        self.key_variance = np.full(
+            (self.max_neurons, self.input_size),
+            np.clip(
+                self.rbf_width**2,
+                self.minimum_key_variance,
+                self.maximum_key_variance,
+            ),
+            dtype=np.float64,
+        )
+
+    def _activities(self, features: FloatArray) -> FloatArray:
+        activities = np.zeros(self.max_neurons, dtype=np.float64)
+        count = int(self.active_count[0])
+        if count == 0:
+            return activities
+        differences = self.neuron_centers[:count] - features
+        scaled_distance = np.mean(
+            np.square(differences) / self.key_variance[:count], axis=1
+        )
+        activities[:count] = np.exp(-0.5 * scaled_distance)
+        return activities
+
+    def _recruit(self, features: FloatArray, target_class: int) -> None:
+        index = int(self.active_count[0])
+        super()._recruit(features, target_class)
+        initial_variance = float(
+            np.clip(
+                self.rbf_width**2,
+                self.minimum_key_variance,
+                self.maximum_key_variance,
+            )
+        )
+        self.key_weight[index] = self.key_prior_strength
+        self.key_m2[index].fill(initial_variance * self.key_prior_strength)
+        self.key_variance[index].fill(initial_variance)
+
+    def _update_neuron_statistics(
+        self,
+        features: FloatArray,
+        activities: FloatArray,
+        active_before_update: int,
+    ) -> None:
+        super()._update_neuron_statistics(
+            features, activities, active_before_update
+        )
+        if active_before_update == 0:
+            return
+        active_slice = slice(0, active_before_update)
+        activation = activities[active_slice]
+        new_weight = self.key_weight[active_slice] + activation
+        delta = features - self.neuron_centers[active_slice]
+        self.neuron_centers[active_slice] += (
+            activation[:, None] * delta / new_weight[:, None]
+        )
+        delta_after = features - self.neuron_centers[active_slice]
+        self.key_m2[active_slice] += activation[:, None] * delta * delta_after
+        self.key_weight[active_slice] = new_weight
+        variance = self.key_m2[active_slice] / new_weight[:, None]
+        self.key_variance[active_slice] = np.clip(
+            variance,
+            self.minimum_key_variance,
+            self.maximum_key_variance,
+        )
+
+    @property
+    def diagnostics(self) -> dict[str, float | int | bool]:
+        result = super().diagnostics
+        count = int(self.active_count[0])
+        result.update(
+            {
+                "adaptive_keys": True,
+                "mean_key_evidence": (
+                    0.0 if count == 0 else float(np.mean(self.key_weight[:count]))
+                ),
+                "mean_learned_width": (
+                    0.0
+                    if count == 0
+                    else float(np.mean(np.sqrt(self.key_variance[:count])))
+                ),
+                "minimum_learned_width": (
+                    0.0
+                    if count == 0
+                    else float(np.min(np.sqrt(self.key_variance[:count])))
+                ),
+                "maximum_learned_width": (
+                    0.0
+                    if count == 0
+                    else float(np.max(np.sqrt(self.key_variance[:count])))
+                ),
+                "mean_value_norm": (
+                    0.0
+                    if count == 0
+                    else float(
+                        np.mean(
+                            np.linalg.norm(
+                                self.expanded_weights[
+                                    :, self.input_size : self.input_size + count
+                                ],
+                                axis=0,
+                            )
+                        )
+                    )
+                ),
+            }
+        )
+        return result
+
+    @property
+    def state_nbytes(self) -> int:
+        return super().state_nbytes + sum(
+            array.nbytes
+            for array in (self.key_weight, self.key_m2, self.key_variance)
+        )
 
 
 @dataclass

@@ -15,6 +15,7 @@ from no_backprop.readouts import (
     CumulativeMaturityReadout,
     DiagonalRLSReadout,
     FastSlowLMSReadout,
+    KeyValueMaturityReadout,
     ProtectedFastSlowReadout,
     PrototypeReadout,
     RLSReadout,
@@ -65,6 +66,11 @@ def save_checkpoint(learner: OnlineReservoir, destination: str | Path) -> Path:
                 for name in maturity_names
             }
         )
+        if isinstance(learner.readout, KeyValueMaturityReadout):
+            for name in ("key_weight", "key_m2", "key_variance"):
+                arrays[f"readout_maturity_{name}"] = getattr(
+                    learner.readout, name
+                )
     elif isinstance(learner.readout, CumulativeMemoryReadout):
         arrays.update(
             {
@@ -163,6 +169,14 @@ def restore_checkpoint(learner: OnlineReservoir, source: str | Path) -> None:
                     arrays[checkpoint_name],
                     checkpoint_name,
                 )
+            if isinstance(learner.readout, KeyValueMaturityReadout):
+                for name in ("key_weight", "key_m2", "key_variance"):
+                    checkpoint_name = f"readout_maturity_{name}"
+                    _copy_array(
+                        getattr(learner.readout, name),
+                        arrays[checkpoint_name],
+                        checkpoint_name,
+                    )
         elif isinstance(learner.readout, CumulativeMemoryReadout):
             cumulative_arrays = (
                 ("slow_weights", "readout_slow_weights"),

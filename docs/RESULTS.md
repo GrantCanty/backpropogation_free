@@ -420,6 +420,48 @@ accuracy. Broad neurons adapt by activating across established classes. Entropy
 reduces that failure to 84.99% online and 60.83% final, but cannot make broad
 features stable. Narrow width 0.05 restores approximately 90% final retention.
 
+### Adaptive key-value neuron experiment
+
+The attention-inspired variant keeps the same single output path but makes each
+recruited local neuron an explicit key-value unit. The reservoir feature is the
+query; the neuron's moving center is its key; a learned diagonal variance
+defines an unnormalized Gaussian compatibility score; and the corresponding
+column of the cumulative output matrix is its value. Activation-weighted
+Welford updates learn keys and widths locally. Accumulated evidence makes center
+movement progressively smaller, with no gradient, backward pass, raw-sample
+buffer, forgetting factor, or prediction router.
+
+An unconstrained width experiment increased ordered online adaptation but was
+unstable: widths approaching 0.1 reduced seed-29 ordered final accuracy to
+80.75%. The checked-in variant starts at width 0.05 and caps learned widths at
+0.06. Three-seed means (seeds 7, 17, and 29) are:
+
+| Learner | Shuffled online | Shuffled final | Ordered online | Ordered final | State |
+|---|---:|---:|---:|---:|---:|
+| Fixed keys, no entropy | **85.25%** | **90.17%** | 76.83% | 89.67% | 135.4 KB |
+| Adaptive keys, no entropy | 85.18% | 89.92% | **77.98%** | **89.75%** | 168.1 KB |
+| Fixed keys, entropy | **85.64%** | **90.42%** | 76.93% | **90.33%** | 135.4 KB |
+| Adaptive keys, entropy | 85.30% | **90.42%** | **77.07%** | 90.00% | 168.1 KB |
+
+The non-entropy adaptive model gains 1.15 points of ordered online accuracy
+without a material mean final-retention change. It is not an overall quality
+win: shuffled accuracy is slightly lower, entropy does not combine
+constructively with key adaptation, state rises 24%, and training takes about
+6% longer than the fixed-key non-entropy control after vectorizing the local key
+updates (0.599 versus 0.568 seconds averaged over the six protocol/seed runs).
+
+On original/inverted/original drift, adaptive keys average 5.25 points of
+original-domain forgetting after inversion versus 5.33 for fixed keys, recover
+4.17 versus 3.50 points on return, and finish at 88.33% original / 76.67%
+inverted versus 88.67% / 75.75%. This is a small shift toward plasticity, not a
+clear dominance result.
+
+The central limitation is basis drift. Each observation remains represented in
+cumulative correlation statistics, but those historical activations were
+computed at earlier key positions. Without raw replay, moving a nonlinear key
+cannot retroactively recompute them in the new basis. Maturity slows this drift
+and the width cap bounds its reach; neither provides an exact correction.
+
 The original/inverted/original drift benchmark is more favorable to the unified
 representation:
 
@@ -435,10 +477,10 @@ immediately after inversion; the non-entropy model retains one more point of
 inverted accuracy after the original domain returns.
 
 The result supports a single-path expanding representation over explicit
-routing, but it also narrows the next question: feature locality is currently a
-hand-set geometry, and entropy comes from uncalibrated ridge scores whose mean
-is near its maximum. Future work should learn local receptive fields and
-calibrate predictive uncertainty before scaling the neuron bank.
+routing, while the adaptive experiment shows that local receptive fields can be
+learned without backpropagation. Entropy still comes from uncalibrated ridge
+scores whose mean is near its maximum. Future work should address basis drift,
+calibrate predictive uncertainty, and scale the neuron bank.
 
 ## Limitations and next decision
 
@@ -461,13 +503,15 @@ calibrate predictive uncertainty before scaling the neuron bank.
   it is factor-free but consumes about ten times the state of exact RLS here.
 - Fast-memory routing improves immediate ordered adaptation but still damages
   final retention, and does not beat cumulative RLS on the drift benchmark.
-- The maturity model preallocates 32 neuron slots, uses a hand-set RBF width,
-  and computes entropy from uncalibrated scores.
+- The maturity model preallocates 32 neuron slots. The fixed-key control uses a
+  hand-set RBF width; the adaptive variant still requires safety bounds and
+  computes entropy from uncalibrated scores.
+- Adaptive keys introduce nonlinear basis drift, add 24% state and about 6%
+  NumPy CPU time, and have only a small three-seed adaptation gain.
 - Past observations have no counterfactual activations for neurons recruited
   later; narrow locality currently protects those historical regions without
   replay, but does not provide a formal non-interference guarantee.
 
 The next mechanism experiment should keep the cumulative single-path invariant
-while learning neuron receptive fields or bandwidths from local statistics.
-Entropy calibration and a capacity-width scaling study should precede learned
-or expanding encoders.
+while correcting or avoiding adaptive-key basis drift. Entropy calibration and
+a capacity-width scaling study should precede learned or expanding encoders.

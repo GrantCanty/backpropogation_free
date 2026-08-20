@@ -26,11 +26,16 @@ class FactorFreeMemoryConfig:
     maturity_max_neurons: int = 32
     maturity_rbf_width: float = 0.05
     maturity_min_center_distance: float = 0.01
+    key_prior_strength: float = 4.0
+    key_minimum_variance: float = 4e-4
+    key_maximum_variance: float = 3.6e-3
     protocols: tuple[DigitsProtocol, ...] = ("shuffled", "class_ordered")
     comparison_kinds: tuple[DigitsKind, ...] = (
         "cumulative_memory",
         "maturity",
         "maturity_entropy",
+        "key_value",
+        "key_value_entropy",
         "rls",
     )
 
@@ -48,6 +53,9 @@ def _digits_config(config: FactorFreeMemoryConfig) -> DigitsExperimentConfig:
         maturity_max_neurons=config.maturity_max_neurons,
         maturity_rbf_width=config.maturity_rbf_width,
         maturity_min_center_distance=config.maturity_min_center_distance,
+        key_prior_strength=config.key_prior_strength,
+        key_minimum_variance=config.key_minimum_variance,
+        key_maximum_variance=config.key_maximum_variance,
     )
 
 
@@ -75,6 +83,9 @@ def run_factor_free_drift(config: FactorFreeMemoryConfig) -> dict[str, Any]:
         maturity_max_neurons=config.maturity_max_neurons,
         maturity_rbf_width=config.maturity_rbf_width,
         maturity_min_center_distance=config.maturity_min_center_distance,
+        key_prior_strength=config.key_prior_strength,
+        key_minimum_variance=config.key_minimum_variance,
+        key_maximum_variance=config.key_maximum_variance,
     )
     return {
         "protocol": "original_to_inverted_to_original",
@@ -85,6 +96,10 @@ def run_factor_free_drift(config: FactorFreeMemoryConfig) -> dict[str, Any]:
             "maturity": run_drift_model("maturity", milestone_config),
             "maturity_entropy": run_drift_model(
                 "maturity_entropy", milestone_config
+            ),
+            "key_value": run_drift_model("key_value", milestone_config),
+            "key_value_entropy": run_drift_model(
+                "key_value_entropy", milestone_config
             ),
             "rls_no_discount": run_drift_model(
                 "rls", milestone_config, rls_forgetting_factor=1.0
@@ -115,7 +130,12 @@ def run_factor_free_memory(
         model
         for models in quality.values()
         for kind, model in models.items()
-        if kind in ("maturity", "maturity_entropy")
+        if kind in (
+            "maturity",
+            "maturity_entropy",
+            "key_value",
+            "key_value_entropy",
+        )
     ]
     return {
         "experiment": "factor_free_cumulative_representation_memory",

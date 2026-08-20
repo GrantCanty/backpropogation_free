@@ -90,6 +90,15 @@ def build_parser() -> argparse.ArgumentParser:
     cumulative_memory.add_argument(
         "--maturity-min-center-distance", type=float, default=0.01
     )
+    cumulative_memory.add_argument(
+        "--key-prior-strength", type=float, default=4.0
+    )
+    cumulative_memory.add_argument(
+        "--key-minimum-variance", type=float, default=4e-4
+    )
+    cumulative_memory.add_argument(
+        "--key-maximum-variance", type=float, default=3.6e-3
+    )
     cumulative_memory.add_argument("--seed", type=int, default=29)
     cumulative_memory.add_argument("--output", type=str)
     scaling = subparsers.add_parser(
@@ -207,6 +216,9 @@ def main(argv: list[str] | None = None) -> int:
                 maturity_max_neurons=args.maturity_max_neurons,
                 maturity_rbf_width=args.maturity_rbf_width,
                 maturity_min_center_distance=args.maturity_min_center_distance,
+                key_prior_strength=args.key_prior_strength,
+                key_minimum_variance=args.key_minimum_variance,
+                key_maximum_variance=args.key_maximum_variance,
                 seed=args.seed,
             )
         )

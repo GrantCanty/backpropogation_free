@@ -80,7 +80,10 @@ retained, and no observation is aged out. The first architecture routes between
 slow and residual memories. The maturity architectures instead use one
 prediction path and a shared representation containing recruitable local
 neurons; the matched entropy variant suppresses recruitment on high-entropy
-startup mistakes.
+startup mistakes. The adaptive key-value variants treat the recurrent feature
+as a query, each local neuron center as a learned key, its diagonal variance as
+the locality rule, and its output-weight column as a value. Key updates use
+local cumulative statistics rather than gradients or a backward pass.
 
 ## Architecture
 
@@ -125,6 +128,10 @@ The controlled MVP passes the five gates in `PLAN.md`:
 - the single-path entropy maturity model averages 90.42% shuffled and 90.33%
   class-ordered final accuracy, modestly exceeding both its non-entropy ablation
   and the 90.08% no-discount RLS baseline; the three-seed differences are small
+- adaptive key-value neurons raise ordered online accuracy from 76.83% to
+  77.98% while leaving ordered final accuracy nearly unchanged (89.67% to
+  89.75%); this costs 24% more state and roughly 6% more training time than the
+  fixed-key control on the current vectorized CPU benchmark
 
 These results validate the experimental machinery and the narrow MVP
 hypotheses. They do **not** establish an advantage on real-world data or prove
@@ -133,8 +140,9 @@ that local learning generally outperforms backpropagation. See
 
 ## Roadmap
 
-The `memory` branch now tests factor-free complementary and single-path maturity
-representations. The next mechanism problem is learning neuron locality and
+The `memory` branch now tests factor-free complementary, single-path maturity,
+and adaptive key-value representations. The next mechanism problem is reducing
+the key learner's basis drift and cost, then scaling neuron capacity and
 calibrating uncertainty without sacrificing the cumulative invariant.
 JEPA-inspired predictive representations remain a later experiment; they are
 not an I-JEPA reimplementation, and no automatic differentiation or backward

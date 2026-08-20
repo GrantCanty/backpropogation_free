@@ -9,7 +9,11 @@ from no_backprop.experiment import (
     build_digits_learner,
     run_digits_model,
 )
-from no_backprop.readouts import CumulativeMaturityReadout, _normalized_entropy
+from no_backprop.readouts import (
+    CumulativeMaturityReadout,
+    KeyValueMaturityReadout,
+    _normalized_entropy,
+)
 
 
 def test_normalized_entropy_distinguishes_uniform_and_confident_scores() -> None:
@@ -39,9 +43,10 @@ def test_maturity_without_neurons_matches_batch_ridge() -> None:
 
 
 def test_maturity_models_have_no_forgetting_or_decay_parameter() -> None:
-    fields = CumulativeMaturityReadout.__dataclass_fields__
-    assert "forgetting_factor" not in fields
-    assert "decay" not in fields
+    for readout_class in (CumulativeMaturityReadout, KeyValueMaturityReadout):
+        fields = readout_class.__dataclass_fields__
+        assert "forgetting_factor" not in fields
+        assert "decay" not in fields
 
 
 def test_entropy_blocks_uniform_startup_error_but_control_recruits() -> None:
@@ -100,7 +105,12 @@ def test_maturity_variants_run_locked_with_bounded_capacity() -> None:
         test_images=rng.uniform(size=(4, 8, 8)),
         test_labels=np.repeat(np.arange(2), 2),
     )
-    for kind in ("maturity", "maturity_entropy"):
+    for kind in (
+        "maturity",
+        "maturity_entropy",
+        "key_value",
+        "key_value_entropy",
+    ):
         result = run_digits_model(
             kind,
             "class_ordered",
@@ -138,3 +148,76 @@ def test_maturity_checkpoint_round_trip(tmp_path) -> None:
     actual = _process_digit_image(restored, evaluation_image, target=None)
     np.testing.assert_allclose(actual, expected)
     assert restored.readout.diagnostics == learner.readout.diagnostics
+
+
+def test_key_value_unit_learns_key_locality_and_value() -> None:
+    readout = KeyValueMaturityReadout(
+        2,
+        2,
+        max_neurons=1,
+        rbf_width=0.05,
+        minimum_key_variance=4e-4,
+        maximum_key_variance=3.6e-3,
+    )
+    target = np.array([0.0, 1.0])
+    origin = np.zeros(2)
+    prediction = readout.predict(origin)
+    readout.update(origin, target, prediction)
+
+    initial_key = readout.neuron_centers[0].copy()
+    nearby = np.array([0.02, 0.0])
+    prediction = readout.predict(nearby)
+    readout.update(nearby, target, prediction)
+
+    assert readout.neuron_centers[0, 0] > initial_key[0]
+    assert readout.key_weight[0] > readout.key_prior_strength
+    assert np.all(readout.key_variance[0] >= readout.minimum_key_variance)
+    assert np.all(readout.key_variance[0] <= readout.maximum_key_variance)
+    assert np.linalg.norm(readout.expanded_weights[:, 2]) > 0.0
+    assert readout.diagnostics["adaptive_keys"]
+
+
+def test_key_maturity_reduces_center_movement() -> None:
+    readout = KeyValueMaturityReadout(1, 2, max_neurons=1)
+    target = np.array([0.0, 1.0])
+    prediction = readout.predict(np.array([0.0]))
+    readout.update(np.array([0.0]), target, prediction)
+
+    observation = np.array([0.02])
+    before = readout.neuron_centers.copy()
+    prediction = readout.predict(observation)
+    readout.update(observation, target, prediction)
+    first_movement = float(np.linalg.norm(readout.neuron_centers - before))
+
+    before = readout.neuron_centers.copy()
+    prediction = readout.predict(observation)
+    readout.update(observation, target, prediction)
+    second_movement = float(np.linalg.norm(readout.neuron_centers - before))
+
+    assert 0.0 < second_movement < first_movement
+
+
+def test_key_value_checkpoint_round_trip(tmp_path) -> None:
+    config = DigitsExperimentConfig(
+        hidden_size=8, seed=11, maturity_max_neurons=4
+    )
+    learner = build_digits_learner("key_value_entropy", config)
+    rng = np.random.default_rng(11)
+    for label in (5, 1, 5, 3):
+        _process_digit_image(
+            learner, rng.uniform(size=(8, 8)), target=_digit_target(label)
+        )
+    path = save_checkpoint(learner, tmp_path / "key-value.npz")
+
+    restored = build_digits_learner("key_value_entropy", config)
+    restore_checkpoint(restored, path)
+    np.testing.assert_allclose(
+        restored.readout.key_weight, learner.readout.key_weight
+    )
+    np.testing.assert_allclose(restored.readout.key_m2, learner.readout.key_m2)
+    np.testing.assert_allclose(
+        restored.readout.key_variance, learner.readout.key_variance
+    )
+    np.testing.assert_allclose(
+        restored.readout.neuron_centers, learner.readout.neuron_centers
+    )

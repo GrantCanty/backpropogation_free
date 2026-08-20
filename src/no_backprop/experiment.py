@@ -27,6 +27,7 @@ from no_backprop.readouts import (
     DiagonalRLSReadout,
     FastSlowLMSReadout,
     FrozenReadout,
+    KeyValueMaturityReadout,
     LMSReadout,
     ProtectedFastSlowReadout,
     PrototypeReadout,
@@ -113,6 +114,9 @@ class DigitsExperimentConfig:
     maturity_max_neurons: int = 32
     maturity_rbf_width: float = 0.05
     maturity_min_center_distance: float = 0.01
+    key_prior_strength: float = 4.0
+    key_minimum_variance: float = 4e-4
+    key_maximum_variance: float = 3.6e-3
 
 
 def _process_rss_bytes() -> int | None:
@@ -431,6 +435,8 @@ DigitsKind = Literal[
     "cumulative_memory",
     "maturity",
     "maturity_entropy",
+    "key_value",
+    "key_value_entropy",
 ]
 
 
@@ -504,6 +510,20 @@ def build_digits_learner(
             rbf_width=config.maturity_rbf_width,
             min_center_distance=config.maturity_min_center_distance,
             entropy_gated=kind == "maturity_entropy",
+        )
+    elif kind in ("key_value", "key_value_entropy"):
+        readout = KeyValueMaturityReadout(
+            feature_size,
+            10,
+            seed=config.seed,
+            regularization=config.cumulative_regularization,
+            max_neurons=config.maturity_max_neurons,
+            rbf_width=config.maturity_rbf_width,
+            min_center_distance=config.maturity_min_center_distance,
+            entropy_gated=kind == "key_value_entropy",
+            key_prior_strength=config.key_prior_strength,
+            minimum_key_variance=config.key_minimum_variance,
+            maximum_key_variance=config.key_maximum_variance,
         )
     elif kind == "fast_slow":
         readout = FastSlowLMSReadout(
@@ -607,6 +627,14 @@ def _learner_training_arrays(learner: OnlineReservoir) -> tuple[np.ndarray, ...]
                 learner.readout.proximity_rejection_count,
             ]
         )
+        if isinstance(learner.readout, KeyValueMaturityReadout):
+            arrays.extend(
+                [
+                    learner.readout.key_weight,
+                    learner.readout.key_m2,
+                    learner.readout.key_variance,
+                ]
+            )
     elif isinstance(learner.readout, CumulativeMemoryReadout):
         arrays.extend(
             [
