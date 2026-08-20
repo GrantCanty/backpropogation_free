@@ -9,6 +9,7 @@ import numpy as np
 
 from no_backprop.eligibility import EligibilityReservoir
 from no_backprop.protocol import ProtocolError
+from no_backprop.predictive import OnlinePredictiveSpatialClassifier
 from no_backprop.readouts import (
     BlockRLSReadout,
     CumulativeMemoryReadout,
@@ -28,7 +29,11 @@ from no_backprop.reservoir import OnlineReservoir
 from no_backprop.spatial import OnlineSpatialClassifier
 
 
-CheckpointLearner = OnlineReservoir | OnlineSpatialClassifier
+CheckpointLearner = (
+    OnlineReservoir
+    | OnlineSpatialClassifier
+    | OnlinePredictiveSpatialClassifier
+)
 
 
 def _copy_array(target: np.ndarray, source: np.ndarray, name: str) -> None:
@@ -50,6 +55,20 @@ def save_checkpoint(learner: CheckpointLearner, destination: str | Path) -> Path
         "bias": learner.bias,
         "state": learner.state,
     }
+    if isinstance(learner, OnlinePredictiveSpatialClassifier):
+        arrays.update(
+            {
+                "predictor_weights": learner.predictor.weights,
+                "predictor_inverse_correlation": (
+                    learner.predictor.inverse_correlation
+                ),
+                "predictor_image_count": learner.predictor_image_count,
+                "predictor_update_count": learner.predictor_update_count,
+                "predictor_squared_error_sum": (
+                    learner.predictor_squared_error_sum
+                ),
+            }
+        )
     if isinstance(learner.readout, CumulativeMaturityReadout):
         maturity_names = (
             "expanded_weights",
@@ -199,6 +218,23 @@ def restore_checkpoint(learner: CheckpointLearner, source: str | Path) -> None:
         )
         _copy_array(learner.bias, arrays["bias"], "bias")
         _copy_array(learner.state, arrays["state"], "state")
+        if isinstance(learner, OnlinePredictiveSpatialClassifier):
+            _copy_array(
+                learner.predictor.weights,
+                arrays["predictor_weights"],
+                "predictor_weights",
+            )
+            _copy_array(
+                learner.predictor.inverse_correlation,
+                arrays["predictor_inverse_correlation"],
+                "predictor_inverse_correlation",
+            )
+            for name in (
+                "predictor_image_count",
+                "predictor_update_count",
+                "predictor_squared_error_sum",
+            ):
+                _copy_array(getattr(learner, name), arrays[name], name)
         if isinstance(learner.readout, CumulativeMaturityReadout):
             maturity_names = (
                 "expanded_weights",

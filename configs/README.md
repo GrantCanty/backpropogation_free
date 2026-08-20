@@ -8,6 +8,7 @@ Milestone 6 quality and forgetting-factor defaults are in `milestone6.json`;
 the lazy 8x8/28x28 systems benchmark is in `scaling.json`.
 The paired recurrent/pixel/fixed-convolution frontend study is in
 `frontends.json`.
+The forward-only masked latent-prediction study is in `predictive.json`.
 The factor-free complementary-memory defaults are in
 `factor_free_memory.json`; it includes fixed-key ungated, entropy-gated, and
 RLS-leverage-gated controls, probationary frozen keys, and adaptive key-value

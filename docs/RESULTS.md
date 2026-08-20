@@ -743,6 +743,74 @@ predictive-representation experiment because it preserves image locality and
 parallelism; the recurrent model remains a required drift control until a
 learned spatial representation recovers coexistence of both domains.
 
+### Forward-only predictive representation
+
+The first JEPA-inspired experiment keeps the fixed convolutional target space
+and learns only a masked latent predictor. Its 4x4x4 feature map is divided
+into four 2x2x4 quadrants. For each quadrant, the shared predictor receives the
+other three quadrants, a one-hot target-position code, and a bias. Four
+predictions are reassembled into a 64-coordinate representation for the same
+Managed-16 classifier used by the controls. The classification prediction is
+made before either the label update or the four self-supervised predictor
+updates.
+
+The predictor is exact cumulative RLS with forgetting factor 1.0. Every image
+contributes four unit-weight updates, no raw example is retained, held-out
+evaluation mutates no weights, and neither encoder nor classifier uses
+backpropagation. This is a forward-only masked-prediction probe, not an I-JEPA
+implementation: the target encoder is fixed and there is no learned target
+network, stop-gradient operation, or exponential-moving-average copy.
+
+| Protocol / representation | Online | Final | Forgetting | Images/s | State |
+|---|---:|---:|---:|---:|---:|
+| Shuffled / fixed conv | **91.10%** | **94.28%** | 1.50 points | **5,298** | **107.4 KB** |
+| Shuffled / predictive | 86.44% | 93.00% | **1.45 points** | 2,584 | 153.2 KB |
+| Augmented / fixed conv | **69.82%** | **92.90%** | 1.53 points | **4,360** | **107.4 KB** |
+| Augmented / predictive | 65.82% | 91.65% | **1.45 points** | 2,333 | 153.2 KB |
+| Ordered / fixed conv | 81.85% | **94.43%** | **2.75 points** | **4,736** | **107.4 KB** |
+| Ordered / predictive | **84.27%** | 76.98% | 21.53 points | 2,740 | 153.2 KB |
+
+Across the same ten paired seeds, predictive minus fixed convolution is +2.42
+± 0.63 percentage points for ordered online accuracy, but -17.45 ± 1.81 for
+ordered final accuracy and +18.78 ± 1.81 for forgetting. On shuffled and
+augmented streams it loses 4.66 ± 0.81 and 4.01 ± 0.80 online points, then
+finishes 1.28 ± 0.67 and 1.25 ± 0.79 points lower. The intervals are nominal
+95% Student-t half-widths and are not corrected for multiple comparisons.
+
+The self-supervised objective itself is working:
+
+| Protocol | Initial target MSE | Final target MSE | Effective rank / 64 |
+|---|---:|---:|---:|
+| Shuffled | 0.1426 | **0.0280** | 8.37 |
+| Augmented | 0.1426 | **0.0321** | 8.89 |
+| Ordered | 0.1426 | **0.0280** | 8.37 |
+
+The fixed-convolution control has effective rank 11.88 of 64. The predictor's
+large loss reduction and nonzero rank rule out a constant-output failure,
+although its lower rank shows additional compression. The downstream failure
+is instead consistent with basis drift: cumulative classifier statistics bind
+labels to predicted coordinates that continue moving as the predictor learns.
+This is especially visible in class order, where the moving basis helps current
+examples while invalidating older label associations.
+
+The recurring-domain benchmark provides a weaker partial benefit but does not
+solve coexistence:
+
+| Representation | Original forgetting after inversion | Final original | Final inverted |
+|---|---:|---:|---:|
+| Recurrent control | **4.33 points** | **88.55%** | **75.98%** |
+| Fixed convolution | 37.48 points | 89.33% | 10.58% |
+| Predictive convolution | 59.20 points | 85.25% | 17.73% |
+
+Predictive coordinates retain 7.15 ± 4.49 more inverted-domain points than
+fixed convolution, but lose 4.08 ± 2.02 original-domain points and forget
+21.73 ± 4.09 more original-domain points during inversion. They remain 58.25
+points behind recurrence on final inverted accuracy. The experiment therefore
+fails the stability and efficiency gates and remains a diagnostic control. A
+follow-up should preserve downstream coordinate identity through frozen,
+append-only, or explicitly consolidated predictive features before adding a
+learned target encoder.
+
 ## Limitations and next decision
 
 - All tasks are synthetic and small.
@@ -757,6 +825,16 @@ learned spatial representation recovers coexistence of both domains.
   hyperparameters were not formally tuned.
 - The augmentation doubles exposure; it has not yet been compared with simply
   repeating the original stream for the same number of updates.
+- Masking removes the target latent coordinates, but neighboring fixed
+  convolution coordinates have overlapping pixel receptive fields; this probe
+  does not establish pixel-level target isolation.
+- Predictive target loss falls substantially, but its continuously changing
+  output basis is incompatible with the current cumulative downstream
+  statistics. A successful predictive objective is not by itself a stable
+  continual representation.
+- The predictive probe retains a fixed target encoder. A learned target
+  encoder is deliberately deferred until downstream coordinate stability is
+  addressed.
 - RLS's strong retention uses quadratic state, so it is not yet a scalable
   answer to continual learning.
 - Blank-image scaling validates systems behavior, not accuracy or numerical

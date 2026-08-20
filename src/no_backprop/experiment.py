@@ -20,6 +20,10 @@ from no_backprop.digits import (
     load_digits_split,
 )
 from no_backprop.metrics import PrequentialMetrics
+from no_backprop.predictive import (
+    OnlinePredictiveSpatialClassifier,
+    PredictiveSpatialConfig,
+)
 from no_backprop.readouts import (
     BlockRLSReadout,
     CumulativeMemoryReadout,
@@ -122,6 +126,7 @@ class DigitsExperimentConfig:
     key_prior_strength: float = 4.0
     key_minimum_variance: float = 4e-4
     key_maximum_variance: float = 3.6e-3
+    predictor_regularization: float = 1.0
 
 
 def _process_rss_bytes() -> int | None:
@@ -456,10 +461,15 @@ DigitsKind = Literal[
     "key_value_entropy",
     "managed16_pixels",
     "managed16_fixed_conv",
+    "managed16_predictive_conv",
 ]
 
 
-DigitsLearner = OnlineReservoir | OnlineSpatialClassifier
+DigitsLearner = (
+    OnlineReservoir
+    | OnlineSpatialClassifier
+    | OnlinePredictiveSpatialClassifier
+)
 
 
 def build_digits_learner(
@@ -467,7 +477,11 @@ def build_digits_learner(
 ) -> DigitsLearner:
     """Build a recurrent or full-image classifier for 8x8 images."""
 
-    if kind in ("managed16_pixels", "managed16_fixed_conv"):
+    if kind in (
+        "managed16_pixels",
+        "managed16_fixed_conv",
+        "managed16_predictive_conv",
+    ):
         if config.hidden_size != 64:
             raise ValueError(
                 "matched spatial frontends require hidden_size=64"
@@ -482,9 +496,17 @@ def build_digits_learner(
             min_center_distance=config.maturity_min_center_distance,
             max_candidates=16,
         )
-        frontend = (
-            "pixels" if kind == "managed16_pixels" else "fixed_convolution"
-        )
+        if kind == "managed16_predictive_conv":
+            return OnlinePredictiveSpatialClassifier(
+                PredictiveSpatialConfig(
+                    image_size=8,
+                    output_size=10,
+                    predictor_regularization=config.predictor_regularization,
+                    seed=config.seed,
+                ),
+                readout,
+            )
+        frontend = "pixels" if kind == "managed16_pixels" else "fixed_convolution"
         return OnlineSpatialClassifier(
             SpatialClassifierConfig(
                 image_size=8,
@@ -691,7 +713,9 @@ def _process_digit_image(
 
     learner.reset_state()
     no_feedback = np.full(10, np.nan, dtype=np.float64)
-    if isinstance(learner, OnlineSpatialClassifier):
+    if isinstance(
+        learner, (OnlineSpatialClassifier, OnlinePredictiveSpatialClassifier)
+    ):
         prediction = learner.predict(image)
         learner.learn(target if target is not None else no_feedback)
         return prediction
@@ -730,6 +754,16 @@ def _learner_training_arrays(learner: DigitsLearner) -> tuple[np.ndarray, ...]:
     """Return all arrays that evaluation must never modify."""
 
     arrays = [learner.input_weights, learner.recurrent_weights, learner.bias]
+    if isinstance(learner, OnlinePredictiveSpatialClassifier):
+        arrays.extend(
+            [
+                learner.predictor.weights,
+                learner.predictor.inverse_correlation,
+                learner.predictor_image_count,
+                learner.predictor_update_count,
+                learner.predictor_squared_error_sum,
+            ]
+        )
     if isinstance(learner.readout, CumulativeMaturityReadout):
         arrays.extend(
             [
@@ -853,6 +887,13 @@ def _evaluate_digits_locked(
     transient_before = [array.copy() for array in transient_arrays]
     try:
         result = _evaluate_digits(learner, images, labels)
+        if isinstance(
+            learner,
+            (OnlineSpatialClassifier, OnlinePredictiveSpatialClassifier),
+        ):
+            result["representation_diagnostics"] = (
+                learner.representation_diagnostics(images)
+            )
     finally:
         for previous, current in zip(transient_before, transient_arrays):
             np.copyto(current, previous)
@@ -1019,9 +1060,20 @@ def run_digits_model(
         result["memory_diagnostics"] = learner.readout.diagnostics
     if isinstance(learner.readout, CumulativeMaturityReadout):
         result["maturity_diagnostics"] = learner.readout.diagnostics
+    if isinstance(learner, OnlinePredictiveSpatialClassifier):
+        result["predictive_diagnostics"] = learner.diagnostics
+    if isinstance(
+        learner, (OnlineSpatialClassifier, OnlinePredictiveSpatialClassifier)
+    ):
+        result["representation_diagnostics"] = final_evaluation[
+            "representation_diagnostics"
+        ]
     result["frontend_diagnostics"] = (
         learner.diagnostics
-        if isinstance(learner, OnlineSpatialClassifier)
+        if isinstance(
+            learner,
+            (OnlineSpatialClassifier, OnlinePredictiveSpatialClassifier),
+        )
         else {
             "frontend": "row_reservoir",
             "recurrent": True,

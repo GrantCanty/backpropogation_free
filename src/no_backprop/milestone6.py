@@ -40,6 +40,7 @@ class Milestone6Config:
     key_prior_strength: float = 4.0
     key_minimum_variance: float = 4e-4
     key_maximum_variance: float = 3.6e-3
+    predictor_regularization: float = 1.0
     forgetting_factors: tuple[float, ...] = (1.0, 0.9999, 0.999, 0.99, 0.95)
     kinds: tuple[DigitsKind, ...] = (
         "lms",
@@ -66,6 +67,7 @@ def _digits_config(config: Milestone6Config) -> DigitsExperimentConfig:
         key_prior_strength=config.key_prior_strength,
         key_minimum_variance=config.key_minimum_variance,
         key_maximum_variance=config.key_maximum_variance,
+        predictor_regularization=config.predictor_regularization,
     )
 
 

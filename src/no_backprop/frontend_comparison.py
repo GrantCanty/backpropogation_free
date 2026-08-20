@@ -27,6 +27,12 @@ FRONTEND_KINDS: tuple[DigitsKind, ...] = (
     "managed16_fixed_conv",
 )
 
+PREDICTIVE_KINDS: tuple[DigitsKind, ...] = (
+    "probation_managed16",
+    "managed16_fixed_conv",
+    "managed16_predictive_conv",
+)
+
 
 @dataclass(frozen=True)
 class FrontendComparisonConfig:
@@ -50,8 +56,18 @@ class FrontendComparisonConfig:
     maturity_min_center_distance: float = 0.01
 
 
+@dataclass(frozen=True)
+class PredictiveRepresentationConfig(FrontendComparisonConfig):
+    """Matched fixed-target latent prediction against both prior controls."""
+
+    predictor_regularization: float = 1.0
+
+
+ComparisonConfig = FrontendComparisonConfig | PredictiveRepresentationConfig
+
+
 def _digits_config(
-    config: FrontendComparisonConfig, seed: int
+    config: ComparisonConfig, seed: int
 ) -> DigitsExperimentConfig:
     if config.feature_width != 64:
         raise ValueError("the matched frontend experiment requires 64 features")
@@ -66,11 +82,16 @@ def _digits_config(
         maturity_max_neurons=config.maturity_max_neurons,
         maturity_rbf_width=config.maturity_rbf_width,
         maturity_min_center_distance=config.maturity_min_center_distance,
+        predictor_regularization=getattr(
+            config, "predictor_regularization", 1.0
+        ),
     )
 
 
 def _milestone_config(
-    config: FrontendComparisonConfig, seed: int
+    config: ComparisonConfig,
+    seed: int,
+    kinds: tuple[DigitsKind, ...],
 ) -> Milestone6Config:
     return Milestone6Config(
         hidden_size=config.feature_width,
@@ -81,12 +102,15 @@ def _milestone_config(
         maturity_max_neurons=config.maturity_max_neurons,
         maturity_rbf_width=config.maturity_rbf_width,
         maturity_min_center_distance=config.maturity_min_center_distance,
-        kinds=FRONTEND_KINDS,
+        predictor_regularization=getattr(
+            config, "predictor_regularization", 1.0
+        ),
+        kinds=kinds,
     )
 
 
 def _protocol_splits(
-    config: FrontendComparisonConfig,
+    config: ComparisonConfig,
     seed: int,
 ) -> tuple[DigitsExperimentConfig, dict[DigitsProtocol, DigitsSplit]]:
     digits_config = _digits_config(config, seed)
@@ -122,7 +146,9 @@ def _quality_value(run: dict[str, Any], metric: str) -> float:
 
 
 def _summarize_quality(
-    runs: list[dict[str, Any]], protocols: tuple[DigitsProtocol, ...]
+    runs: list[dict[str, Any]],
+    protocols: tuple[DigitsProtocol, ...],
+    kinds: tuple[DigitsKind, ...],
 ) -> dict[str, Any]:
     metrics = (
         "online_accuracy",
@@ -144,16 +170,18 @@ def _summarize_quality(
                 )
                 for metric in metrics
             }
-            for kind in FRONTEND_KINDS
+            for kind in kinds
         }
         for protocol in protocols
     }
 
 
 def _summarize_paired_differences(
-    runs: list[dict[str, Any]], protocols: tuple[DigitsProtocol, ...]
+    runs: list[dict[str, Any]],
+    protocols: tuple[DigitsProtocol, ...],
+    kinds: tuple[DigitsKind, ...],
+    baseline: DigitsKind,
 ) -> dict[str, Any]:
-    baseline = "probation_managed16"
     metrics = ("online_accuracy", "final_test_accuracy", "forgetting")
     return {
         protocol: {
@@ -171,14 +199,16 @@ def _summarize_paired_differences(
                 )
                 for metric in metrics
             }
-            for kind in FRONTEND_KINDS
+            for kind in kinds
             if kind != baseline
         }
         for protocol in protocols
     }
 
 
-def _summarize_drift(runs: list[dict[str, Any]]) -> dict[str, Any]:
+def _summarize_drift(
+    runs: list[dict[str, Any]], kinds: tuple[DigitsKind, ...]
+) -> dict[str, Any]:
     metrics = (
         "original_forgetting_after_drift",
         "original_recovery_on_return",
@@ -192,14 +222,15 @@ def _summarize_drift(runs: list[dict[str, Any]]) -> dict[str, Any]:
             )
             for metric in metrics
         }
-        for kind in FRONTEND_KINDS
+        for kind in kinds
     }
 
 
 def _summarize_paired_drift_differences(
     runs: list[dict[str, Any]],
+    kinds: tuple[DigitsKind, ...],
+    baseline: DigitsKind,
 ) -> dict[str, Any]:
-    baseline = "probation_managed16"
     metrics = (
         "original_forgetting_after_drift",
         "original_recovery_on_return",
@@ -217,16 +248,20 @@ def _summarize_paired_drift_differences(
             )
             for metric in metrics
         }
-        for kind in FRONTEND_KINDS
+        for kind in kinds
         if kind != baseline
     }
 
 
-def run_frontend_comparison(
-    config: FrontendComparisonConfig = FrontendComparisonConfig(),
+def _run_matched_comparison(
+    config: ComparisonConfig,
+    *,
+    kinds: tuple[DigitsKind, ...],
+    baseline: DigitsKind,
+    experiment: str,
+    paired_summary_name: str,
+    paired_drift_summary_name: str,
 ) -> dict[str, Any]:
-    """Run matched frontends without downloading or retaining raw samples."""
-
     if not config.seeds or not config.protocols:
         raise ValueError("seeds and protocols cannot be empty")
     if len(set(config.seeds)) != len(config.seeds):
@@ -248,16 +283,16 @@ def run_frontend_comparison(
                     digits_config,
                     split=splits[protocol],
                 )
-                for kind in FRONTEND_KINDS
+                for kind in kinds
             }
             for protocol in config.protocols
         }
         drift = (
             {
                 kind: run_drift_model(
-                    kind, _milestone_config(config, seed)
+                    kind, _milestone_config(config, seed, kinds)
                 )
-                for kind in FRONTEND_KINDS
+                for kind in kinds
             }
             if config.include_drift
             else {}
@@ -265,13 +300,13 @@ def run_frontend_comparison(
         runs.append({"seed": seed, "quality": quality, "drift": drift})
 
     quality_runs = [
-        result
+        model_result
         for run in runs
         for models in run["quality"].values()
-        for result in models.values()
+        for model_result in models.values()
     ]
     result: dict[str, Any] = {
-        "experiment": "matched_nonrecurrent_image_frontends",
+        "experiment": experiment,
         "config": asdict(config),
         "dataset": {
             "source": "sklearn.datasets.load_digits (bundled; no download)",
@@ -305,15 +340,162 @@ def run_frontend_comparison(
         },
         "runs": runs,
         "summary": {
-            "quality": _summarize_quality(runs, config.protocols),
-            "paired_difference_from_recurrent": (
-                _summarize_paired_differences(runs, config.protocols)
+            "quality": _summarize_quality(runs, config.protocols, kinds),
+            paired_summary_name: _summarize_paired_differences(
+                runs, config.protocols, kinds, baseline
             ),
         },
     }
     if config.include_drift:
-        result["summary"]["drift"] = _summarize_drift(runs)
-        result["summary"]["paired_drift_difference_from_recurrent"] = (
-            _summarize_paired_drift_differences(runs)
+        result["summary"]["drift"] = _summarize_drift(runs, kinds)
+        result["summary"][paired_drift_summary_name] = (
+            _summarize_paired_drift_differences(runs, kinds, baseline)
         )
+    return result
+
+
+def run_frontend_comparison(
+    config: FrontendComparisonConfig = FrontendComparisonConfig(),
+) -> dict[str, Any]:
+    """Run matched frontends without downloading or retaining raw samples."""
+
+    return _run_matched_comparison(
+        config,
+        kinds=FRONTEND_KINDS,
+        baseline="probation_managed16",
+        experiment="matched_nonrecurrent_image_frontends",
+        paired_summary_name="paired_difference_from_recurrent",
+        paired_drift_summary_name="paired_drift_difference_from_recurrent",
+    )
+
+
+def run_predictive_representation_comparison(
+    config: PredictiveRepresentationConfig = PredictiveRepresentationConfig(),
+) -> dict[str, Any]:
+    """Compare latent prediction with fixed-convolution and recurrent controls."""
+
+    result = _run_matched_comparison(
+        config,
+        kinds=PREDICTIVE_KINDS,
+        baseline="managed16_fixed_conv",
+        experiment="forward_only_predictive_spatial_representation",
+        paired_summary_name="paired_difference_from_fixed_convolution",
+        paired_drift_summary_name=(
+            "paired_drift_difference_from_fixed_convolution"
+        ),
+    )
+    predictive_runs = [
+        run["quality"][protocol]["managed16_predictive_conv"]
+        for run in result["runs"]
+        for protocol in config.protocols
+    ]
+    result["invariants"].update(
+        {
+            "predictor_forgetting_factor": 1.0,
+            "predictor_uses_backpropagation": False,
+            "four_predictor_updates_per_training_image": all(
+                run["predictive_diagnostics"]["predictor_updates"]
+                == 4 * run["trained_samples"]
+                for run in predictive_runs
+            ),
+            "every_training_image_updates_predictor": all(
+                run["predictive_diagnostics"]["predictor_images"]
+                == run["trained_samples"]
+                for run in predictive_runs
+            ),
+            "predictor_stored_raw_samples": 0,
+        }
+    )
+    representation_metrics = (
+        "target_prediction_mse",
+        "effective_rank",
+        "normalized_effective_rank",
+        "mean_feature_variance",
+        "mean_representation_norm",
+    )
+    result["summary"]["predictive_representation"] = {
+        protocol: {
+            metric: _summary(
+                [
+                    float(
+                        run["quality"][protocol][
+                            "managed16_predictive_conv"
+                        ]["representation_diagnostics"][metric]
+                    )
+                    for run in result["runs"]
+                ]
+            )
+            for metric in representation_metrics
+        }
+        for protocol in config.protocols
+    }
+    result["summary"]["predictive_learning"] = {
+        protocol: {
+            "initial_target_prediction_mse": _summary(
+                [
+                    float(
+                        run["quality"][protocol][
+                            "managed16_predictive_conv"
+                        ]["evaluation_history"][0][
+                            "representation_diagnostics"
+                        ]["target_prediction_mse"]
+                    )
+                    for run in result["runs"]
+                ]
+            ),
+            "final_target_prediction_mse": _summary(
+                [
+                    float(
+                        run["quality"][protocol][
+                            "managed16_predictive_conv"
+                        ]["representation_diagnostics"][
+                            "target_prediction_mse"
+                        ]
+                    )
+                    for run in result["runs"]
+                ]
+            ),
+            "target_prediction_mse_reduction": _summary(
+                [
+                    float(
+                        run["quality"][protocol][
+                            "managed16_predictive_conv"
+                        ]["evaluation_history"][0][
+                            "representation_diagnostics"
+                        ]["target_prediction_mse"]
+                    )
+                    - float(
+                        run["quality"][protocol][
+                            "managed16_predictive_conv"
+                        ]["representation_diagnostics"][
+                            "target_prediction_mse"
+                        ]
+                    )
+                    for run in result["runs"]
+                ]
+            ),
+        }
+        for protocol in config.protocols
+    }
+    fixed_metrics = tuple(
+        metric
+        for metric in representation_metrics
+        if metric != "target_prediction_mse"
+    )
+    result["summary"]["fixed_convolution_representation"] = {
+        protocol: {
+            metric: _summary(
+                [
+                    float(
+                        run["quality"][protocol]["managed16_fixed_conv"][
+                            "representation_diagnostics"
+                        ][metric]
+                    )
+                    for run in result["runs"]
+                ]
+            )
+            for metric in fixed_metrics
+        }
+        for protocol in config.protocols
+    }
     return result

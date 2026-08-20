@@ -31,6 +31,7 @@ The experimental contract and milestone plan are in [PLAN.md](PLAN.md).
 - Lazy 8x8/28x28 stream-length, feature-width, and managed-memory capacity
   scaling benchmarks
 - Matched recurrent, raw-pixel, and fixed-convolution image frontends
+- Forward-only masked spatial prediction with cumulative, unit-weight RLS
 
 All current data is generated or bundled locally and handled deterministically.
 Running the MVP does not download a dataset.
@@ -49,6 +50,8 @@ PYTHONPATH=src python3 -m no_backprop cumulative-memory \
 PYTHONPATH=src python3 -m no_backprop scale --output results/scaling.json
 PYTHONPATH=src python3 -m no_backprop frontends \
   --output results/frontend-comparison.json
+PYTHONPATH=src python3 -m no_backprop predictive \
+  --output results/predictive-comparison.json
 PYTHONPATH=src python3 -m no_backprop replicate --output results/replication.json
 
 # Conventional comparison, kept outside the core package
@@ -105,6 +108,23 @@ original/inverted/original stream it retains only 10.58% inverted accuracy,
 versus 75.98% for the recurrent representation. Fixed convolution therefore
 advances as the spatial basis for predictive-representation experiments, while
 the recurrent model remains the retention control rather than being removed.
+
+The predictive command masks each 2x2 quadrant of the fixed convolutional map,
+predicts that latent target from the other three quadrants and a position code,
+and reassembles the four predictions into the 64-coordinate representation.
+The predictor is cumulative RLS with a forgetting factor of exactly 1.0: it
+uses no backpropagation, discounting, or stored raw examples. Across ten seeds,
+held-out target MSE falls from 0.143 before learning to 0.028 after shuffled
+training, and the learned representation retains effective rank 8.37 of 64.
+The mechanism therefore learns a nonconstant predictive representation, but it
+does not pass the stability gate. Relative to fixed convolution, ordered online
+accuracy rises 2.42 points while ordered final accuracy falls 17.45 points;
+shuffled and augmented final accuracy fall 1.28 and 1.25 points. State rises
+from 107.4 to 153.2 KB and CPU throughput is roughly halved. On recurring
+original/inverted/original data, final inverted accuracy improves from 10.58%
+to 17.73%, still far below the recurrent control's 75.98%. This first version
+is retained as a diagnostic control: the next predictive design must keep the
+coordinates consumed by cumulative classifier statistics stable.
 
 The cumulative-memory command tests both factor-free branches. Every labeled
 observation updates cumulative statistics with unit weight, no raw image is
@@ -194,9 +214,10 @@ that local learning generally outperforms backpropagation. See
 ## Roadmap
 
 The `memory` branch now tests factor-free complementary, single-path maturity,
-and adaptive key-value representations. The next mechanism problem is reducing
-systems cost across larger neuron banks and generated 8x8/28x28 streams without
-downloading external datasets.
-JEPA-inspired predictive representations remain a later experiment; they are
-not an I-JEPA reimplementation, and no automatic differentiation or backward
-pass enters the core learner.
+adaptive key-value, and forward-only predictive representations. The first
+JEPA-inspired experiment is not an I-JEPA reimplementation: a cumulative local
+predictor learns masked fixed-convolution targets without automatic
+differentiation or a backward pass. It establishes that target prediction can
+be learned online, but also exposes representation-basis drift as the next
+mechanism problem. Future predictive coordinates should be frozen, appended,
+or consolidated before the downstream cumulative statistics depend on them.

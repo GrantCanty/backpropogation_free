@@ -11,6 +11,35 @@ from no_backprop.protocol import FloatArray, ProtocolError
 from no_backprop.readouts import Readout
 
 
+def representation_statistics(matrix: FloatArray) -> dict[str, float | int]:
+    """Measure variance and spectral rank without retaining data in the model."""
+
+    matrix = np.asarray(matrix, dtype=np.float64)
+    if matrix.ndim != 2 or len(matrix) == 0:
+        raise ValueError("representations must be a non-empty matrix")
+    centered = matrix - np.mean(matrix, axis=0, keepdims=True)
+    covariance = centered.T @ centered / max(1, len(matrix) - 1)
+    eigenvalues = np.maximum(np.linalg.eigvalsh(covariance), 0.0)
+    total = float(np.sum(eigenvalues))
+    if total <= np.finfo(float).tiny:
+        effective_rank = 0.0
+    else:
+        probabilities = eigenvalues[eigenvalues > 0.0] / total
+        effective_rank = float(
+            np.exp(-np.sum(probabilities * np.log(probabilities)))
+        )
+    return {
+        "samples": len(matrix),
+        "feature_width": matrix.shape[1],
+        "effective_rank": effective_rank,
+        "normalized_effective_rank": effective_rank / matrix.shape[1],
+        "mean_feature_variance": float(np.mean(np.diag(covariance))),
+        "mean_representation_norm": float(
+            np.mean(np.linalg.norm(matrix, axis=1))
+        ),
+    }
+
+
 class ImageEncoder(Protocol):
     """Stateless image-to-vector transform used before an online readout."""
 
@@ -79,6 +108,11 @@ class FixedConvolutionImageEncoder:
         self.persistent_arrays = (self.kernels,)
 
     def encode(self, image: FloatArray) -> FloatArray:
+        return self.feature_map(image).reshape(-1)
+
+    def feature_map(self, image: FloatArray) -> FloatArray:
+        """Return the pooled channel-first map before vectorization."""
+
         image = np.asarray(image, dtype=np.float64)
         expected = (self.image_size, self.image_size)
         if image.shape != expected:
@@ -101,7 +135,7 @@ class FixedConvolutionImageEncoder:
         ).mean(axis=(2, 4))
         # Undo the RMS reduction caused by averaging independent 2x2 values.
         pooled *= np.sqrt(float(self.pool_size * self.pool_size))
-        return pooled.reshape(-1)
+        return pooled
 
 
 @dataclass(frozen=True)
@@ -176,6 +210,12 @@ class OnlineSpatialClassifier:
     def reset_state(self) -> None:
         if self._pending_prediction is not None:
             raise ProtocolError("cannot reset between predict and learn")
+
+    def representation_diagnostics(
+        self, images: FloatArray
+    ) -> dict[str, float | int]:
+        matrix = np.stack([self.encoder.encode(image) for image in images])
+        return representation_statistics(matrix)
 
     @property
     def diagnostics(self) -> dict[str, str | int | bool]:
