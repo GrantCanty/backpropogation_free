@@ -16,9 +16,13 @@ from no_backprop.digits import (
 from no_backprop.experiment import (
     DigitsExperimentConfig,
     DigitsKind,
+    DigitsLearner,
+    build_digits_learner,
     run_digits_model,
 )
 from no_backprop.milestone6 import Milestone6Config, run_drift_model
+from no_backprop.reservoir import OnlineReservoir
+from no_backprop.spatial import OnlineSpatialClassifier
 
 
 FRONTEND_KINDS: tuple[DigitsKind, ...] = (
@@ -31,6 +35,13 @@ PREDICTIVE_KINDS: tuple[DigitsKind, ...] = (
     "probation_managed16",
     "managed16_fixed_conv",
     "managed16_predictive_conv",
+)
+
+POLARITY_KINDS: tuple[DigitsKind, ...] = (
+    "probation_managed16",
+    "managed16_fixed_conv",
+    "managed16_absolute_conv",
+    "managed16_signed_magnitude_conv",
 )
 
 
@@ -63,7 +74,16 @@ class PredictiveRepresentationConfig(FrontendComparisonConfig):
     predictor_regularization: float = 1.0
 
 
-ComparisonConfig = FrontendComparisonConfig | PredictiveRepresentationConfig
+@dataclass(frozen=True)
+class PolarityComparisonConfig(FrontendComparisonConfig):
+    """Matched contrast-polarity geometry ablation."""
+
+
+ComparisonConfig = (
+    FrontendComparisonConfig
+    | PredictiveRepresentationConfig
+    | PolarityComparisonConfig
+)
 
 
 def _digits_config(
@@ -367,6 +387,133 @@ def run_frontend_comparison(
         paired_summary_name="paired_difference_from_recurrent",
         paired_drift_summary_name="paired_drift_difference_from_recurrent",
     )
+
+
+def _encode_images_without_learning(
+    learner: DigitsLearner, images: np.ndarray
+) -> np.ndarray:
+    if isinstance(learner, OnlineSpatialClassifier):
+        return np.stack([learner.encoder.encode(image) for image in images])
+    if not isinstance(learner, OnlineReservoir):
+        raise TypeError(
+            "polarity geometry requires a fixed spatial or reservoir encoder"
+        )
+    representations: list[np.ndarray] = []
+    no_feedback = np.full(learner.config.output_size, np.nan, dtype=np.float64)
+    for image in images:
+        learner.reset_state()
+        for row in image:
+            learner.predict(row)
+            learner.learn(no_feedback)
+        representations.append(learner.state.copy())
+    return np.stack(representations)
+
+
+def _inversion_geometry(
+    kind: DigitsKind,
+    config: DigitsExperimentConfig,
+    images: np.ndarray,
+) -> dict[str, float | int]:
+    learner = build_digits_learner(kind, config)
+    original = _encode_images_without_learning(learner, images)
+    inverted = _encode_images_without_learning(learner, 1.0 - images)
+    original_norms = np.linalg.norm(original, axis=1)
+    inverted_norms = np.linalg.norm(inverted, axis=1)
+    denominator = np.maximum(
+        original_norms * inverted_norms, np.finfo(float).tiny
+    )
+    cosine = np.sum(original * inverted, axis=1) / denominator
+    sum_norms = np.maximum(
+        original_norms + inverted_norms, np.finfo(float).tiny
+    )
+    return {
+        "samples": len(images),
+        "feature_width": original.shape[1],
+        "mean_original_inverted_cosine": float(np.mean(cosine)),
+        "mean_original_inverted_distance": float(
+            np.mean(np.linalg.norm(original - inverted, axis=1))
+        ),
+        "mean_antipodal_residual": float(
+            np.mean(np.linalg.norm(original + inverted, axis=1) / sum_norms)
+        ),
+    }
+
+
+def run_polarity_comparison(
+    config: PolarityComparisonConfig = PolarityComparisonConfig(),
+) -> dict[str, Any]:
+    """Test fixed polarity transforms against convolution and recurrence."""
+
+    result = _run_matched_comparison(
+        config,
+        kinds=POLARITY_KINDS,
+        baseline="managed16_fixed_conv",
+        experiment="matched_contrast_polarity_frontends",
+        paired_summary_name="paired_difference_from_fixed_convolution",
+        paired_drift_summary_name=(
+            "paired_drift_difference_from_fixed_convolution"
+        ),
+    )
+    for run in result["runs"]:
+        seed = int(run["seed"])
+        digits_config, splits = _protocol_splits(config, seed)
+        images = splits["shuffled"].test_images
+        run["inversion_geometry"] = {
+            kind: _inversion_geometry(kind, digits_config, images)
+            for kind in POLARITY_KINDS
+        }
+    geometry_metrics = (
+        "mean_original_inverted_cosine",
+        "mean_original_inverted_distance",
+        "mean_antipodal_residual",
+    )
+    result["summary"]["inversion_geometry"] = {
+        kind: {
+            metric: _summary(
+                [
+                    float(run["inversion_geometry"][kind][metric])
+                    for run in result["runs"]
+                ]
+            )
+            for metric in geometry_metrics
+        }
+        for kind in POLARITY_KINDS
+    }
+    recurrent_kind: DigitsKind = "probation_managed16"
+    result["summary"]["absolute_cosine_gap_from_recurrent"] = {
+        kind: _summary(
+            [
+                abs(
+                    float(
+                        run["inversion_geometry"][kind][
+                            "mean_original_inverted_cosine"
+                        ]
+                    )
+                    - float(
+                        run["inversion_geometry"][recurrent_kind][
+                            "mean_original_inverted_cosine"
+                        ]
+                    )
+                )
+                for run in result["runs"]
+            ]
+        )
+        for kind in POLARITY_KINDS
+        if kind != recurrent_kind
+    }
+    result["invariants"].update(
+        {
+            "geometry_measured_without_learning": True,
+            "state_reset_before_every_image": True,
+            "polarity_frontends_are_fixed": True,
+            "all_geometry_feature_widths_are_64": all(
+                geometry["feature_width"] == 64
+                for run in result["runs"]
+                for geometry in run["inversion_geometry"].values()
+            ),
+        }
+    )
+    return result
 
 
 def run_predictive_representation_comparison(

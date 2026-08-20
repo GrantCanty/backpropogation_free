@@ -138,11 +138,52 @@ class FixedConvolutionImageEncoder:
         return pooled
 
 
+@dataclass
+class PolarityConvolutionImageEncoder:
+    """Fixed convolution with an explicit contrast-polarity representation."""
+
+    image_size: int = 8
+    mode: Literal["absolute", "signed_magnitude"] = "absolute"
+    seed: int = 0
+
+    def __post_init__(self) -> None:
+        if self.mode not in ("absolute", "signed_magnitude"):
+            raise ValueError(f"unknown polarity mode: {self.mode}")
+        filters = 4 if self.mode == "absolute" else 2
+        self.base = FixedConvolutionImageEncoder(
+            image_size=self.image_size,
+            filters=filters,
+            seed=self.seed,
+        )
+        self.name = f"{self.mode}_convolution"
+        self.output_size = (
+            self.base.output_size
+            if self.mode == "absolute"
+            else 2 * self.base.output_size
+        )
+        self.persistent_arrays = self.base.persistent_arrays
+
+    @property
+    def kernels(self) -> FloatArray:
+        return self.base.kernels
+
+    def encode(self, image: FloatArray) -> FloatArray:
+        signed = self.base.encode(image)
+        if self.mode == "absolute":
+            return np.abs(signed)
+        return np.concatenate((signed, np.abs(signed)))
+
+
 @dataclass(frozen=True)
 class SpatialClassifierConfig:
     image_size: int = 8
     output_size: int = 10
-    frontend: Literal["pixels", "fixed_convolution"] = "pixels"
+    frontend: Literal[
+        "pixels",
+        "fixed_convolution",
+        "absolute_convolution",
+        "signed_magnitude_convolution",
+    ] = "pixels"
     seed: int = 0
 
 
@@ -155,6 +196,20 @@ class OnlineSpatialClassifier:
         elif config.frontend == "fixed_convolution":
             encoder = FixedConvolutionImageEncoder(
                 image_size=config.image_size, seed=config.seed
+            )
+        elif config.frontend in (
+            "absolute_convolution",
+            "signed_magnitude_convolution",
+        ):
+            mode = (
+                "absolute"
+                if config.frontend == "absolute_convolution"
+                else "signed_magnitude"
+            )
+            encoder = PolarityConvolutionImageEncoder(
+                image_size=config.image_size,
+                mode=mode,
+                seed=config.seed,
             )
         else:  # pragma: no cover - Literal guards typed callers
             raise ValueError(f"unknown spatial frontend: {config.frontend}")

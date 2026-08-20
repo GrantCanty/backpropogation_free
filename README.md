@@ -32,6 +32,7 @@ The experimental contract and milestone plan are in [PLAN.md](PLAN.md).
   scaling benchmarks
 - Matched recurrent, raw-pixel, and fixed-convolution image frontends
 - Forward-only masked spatial prediction with cumulative, unit-weight RLS
+- Matched absolute and signed-magnitude convolution polarity ablations
 
 All current data is generated or bundled locally and handled deterministically.
 Running the MVP does not download a dataset.
@@ -52,6 +53,8 @@ PYTHONPATH=src python3 -m no_backprop frontends \
   --output results/frontend-comparison.json
 PYTHONPATH=src python3 -m no_backprop predictive \
   --output results/predictive-comparison.json
+PYTHONPATH=src python3 -m no_backprop polarity \
+  --output results/polarity-comparison.json
 PYTHONPATH=src python3 -m no_backprop replicate --output results/replication.json
 
 # Conventional comparison, kept outside the core package
@@ -125,6 +128,20 @@ original/inverted/original data, final inverted accuracy improves from 10.58%
 to 17.73%, still far below the recurrent control's 75.98%. This first version
 is retained as a diagnostic control: the next predictive design must keep the
 coordinates consumed by cumulative classifier statistics stable.
+
+The polarity command tests why the recurrent control retained inverted digits
+so much better than the original convolution. Absolute convolution keeps four
+filters and discards response sign. Signed-magnitude convolution uses two
+filters and concatenates 32 signed with 32 magnitude coordinates. Both remain
+fixed, 64-wide, forward-only encoders with the same Managed-16 readout. Across
+ten seeds, signed-magnitude reduces the mean per-seed original/inverted cosine
+gap from recurrence from 0.704 to 0.145. Absolute convolution deliberately
+makes the domains similar and raises final inverted accuracy from 10.58% to
+88.88%, exceeding recurrence's 75.98%, while preserving shuffled and ordered
+final accuracy. This identifies contrast-sign interference—not cross-example
+recurrent state—as the cause of the earlier gap. It is a benchmark-specific
+invariance result, not evidence that fixed absolute features solve general
+concept drift.
 
 The cumulative-memory command tests both factor-free branches. Every labeled
 observation updates cumulative statistics with unit weight, no raw image is

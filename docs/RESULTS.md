@@ -811,6 +811,83 @@ follow-up should preserve downstream coordinate identity through frozen,
 append-only, or explicitly consolidated predictive features before adding a
 learned target encoder.
 
+### Contrast-polarity geometry ablation
+
+The inversion result above does not imply that recurrent state is inherently
+better at changing information. Reservoir state is reset before every image,
+so it cannot carry experience between examples. The likely confound is the
+fixed convolution's geometry. Its kernels have zero mean and its activation is
+odd, making interior responses approximately satisfy
+`tanh(k * (1 - x)) = -tanh(k * x)`. The same digit and its inversion therefore
+become opposing inputs to one cumulative classifier.
+
+Two fixed 64-coordinate controls test that explanation. Absolute convolution
+applies four filters and retains only response magnitudes. Signed-magnitude
+convolution applies two filters to produce 32 signed coordinates and
+concatenates their 32 magnitudes. The latter preserves polarity information
+while giving each example a shared even component. It has no mixing coefficient
+or tuned threshold: signed and magnitude channels receive equal representation
+width. Both use the exact Managed-16 readout, one update per image, locked
+evaluation, and no gradients or stored examples.
+
+| Encoder | Original/inverted cosine | Per-seed cosine gap from recurrence |
+|---|---:|---:|
+| Recurrent reservoir | 0.231 | -- |
+| Fixed convolution | -0.473 | 0.704 |
+| Signed-magnitude convolution | **0.127** | **0.145** |
+| Absolute convolution | 0.724 | 0.492 |
+
+These are ten-seed means. The recurrent cosine is seed-sensitive (sample
+standard deviation 0.204), whereas signed-magnitude is more stable (0.044).
+Signed-magnitude is the direct answer to the geometry question: it moves
+inversion pairs much closer to the reservoir's relationship at the same width.
+Absolute convolution targets a different outcome, making the two domains
+similar rather than merely non-opposing.
+
+| Protocol / encoder | Online | Final | Forgetting |
+|---|---:|---:|---:|
+| Shuffled / fixed conv | 91.10% | 94.28% | 1.50 points |
+| Shuffled / signed-magnitude | **91.65%** | **94.68%** | 1.50 points |
+| Shuffled / absolute | 91.62% | 94.63% | **1.30 points** |
+| Augmented / fixed conv | 69.82% | **92.90%** | **1.53 points** |
+| Augmented / signed-magnitude | 73.18% | 92.40% | 2.08 points |
+| Augmented / absolute | **73.52%** | 92.53% | 1.63 points |
+| Ordered / fixed conv | 81.85% | 94.43% | 2.75 points |
+| Ordered / signed-magnitude | 84.25% | **94.58%** | 2.75 points |
+| Ordered / absolute | **84.94%** | **94.58%** | **2.63 points** |
+
+Relative to fixed convolution, absolute and signed-magnitude improve augmented
+online accuracy by 3.70 ± 1.46 and 3.36 ± 1.18 percentage points and ordered
+online accuracy by 3.09 ± 0.95 and 2.40 ± 0.92 points. Their ordinary final
+accuracy changes are small and every nominal 95% interval includes zero.
+
+The recurring-domain result changes completely:
+
+| Encoder | Original forgetting after inversion | Final original | Final inverted |
+|---|---:|---:|---:|
+| Fixed convolution | 37.48 points | 89.33% | 10.58% |
+| Recurrent reservoir | 4.33 points | 88.55% | 75.98% |
+| Signed-magnitude convolution | 8.95 points | 90.32% | 78.78% |
+| Absolute convolution | **3.33 points** | **92.38%** | **88.88%** |
+
+Against fixed convolution, absolute responses reduce original forgetting by
+34.15 ± 3.39 points and improve final inverted accuracy by 78.30 ± 2.96.
+Signed-magnitude reduces forgetting by 28.53 ± 2.77 points and improves final
+inverted accuracy by 68.20 ± 3.59. Absolute convolution also finishes 12.90 ±
+2.38 inverted-domain points above recurrence; signed-magnitude finishes 2.80 ±
+3.39 above it, an inconclusive difference.
+
+This establishes that the previous 65-point recurrence advantage was primarily
+a polarity-representation failure. Absolute convolution wins because inversion
+becomes approximately a nuisance symmetry: at the feature level, much of the
+"domain change" disappears. That is correct for this benchmark because labels
+are invariant to contrast polarity, but it would be harmful wherever polarity
+changes meaning. Signed-magnitude is the more informative general control
+because it preserves both sign and shared energy. Neither fixed transform
+solves arbitrary context shifts or the predictive model's moving-basis problem;
+future drift tests must include transformations not removable by a hand-chosen
+symmetry.
+
 ## Limitations and next decision
 
 - All tasks are synthetic and small.
@@ -835,6 +912,10 @@ learned target encoder.
 - The predictive probe retains a fixed target encoder. A learned target
   encoder is deliberately deferred until downstream coordinate stability is
   addressed.
+- The original/inverted/original benchmark preserves labels under contrast
+  reversal. Absolute convolution is intentionally tailored to that symmetry;
+  its success must not be generalized to transformations that change semantic
+  information.
 - RLS's strong retention uses quadratic state, so it is not yet a scalable
   answer to continual learning.
 - Blank-image scaling validates systems behavior, not accuracy or numerical

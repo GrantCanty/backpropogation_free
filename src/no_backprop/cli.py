@@ -22,8 +22,10 @@ from no_backprop.milestone6 import Milestone6Config, run_milestone6
 from no_backprop.factor_free import FactorFreeMemoryConfig, run_factor_free_memory
 from no_backprop.frontend_comparison import (
     FrontendComparisonConfig,
+    PolarityComparisonConfig,
     PredictiveRepresentationConfig,
     run_frontend_comparison,
+    run_polarity_comparison,
     run_predictive_representation_comparison,
 )
 from no_backprop.scaling import (
@@ -182,6 +184,20 @@ def build_parser() -> argparse.ArgumentParser:
     predictive.add_argument("--predictor-regularization", type=float, default=1.0)
     predictive.add_argument("--no-drift", action="store_true")
     predictive.add_argument("--output", type=str)
+    polarity = subparsers.add_parser(
+        "polarity",
+        help="compare polarity-aware convolution with recurrence",
+    )
+    polarity.add_argument(
+        "--seeds",
+        type=int,
+        nargs="+",
+        default=[3, 7, 11, 17, 23, 29, 37, 41, 47, 53],
+    )
+    polarity.add_argument("--test-per-class", type=int, default=40)
+    polarity.add_argument("--augmentation-copies", type=int, default=1)
+    polarity.add_argument("--no-drift", action="store_true")
+    polarity.add_argument("--output", type=str)
     replicate = subparsers.add_parser(
         "replicate", help="run delayed and continual benchmarks across seeds"
     )
@@ -322,6 +338,18 @@ def main(argv: list[str] | None = None) -> int:
                 test_per_class=args.test_per_class,
                 augmentation_copies=args.augmentation_copies,
                 predictor_regularization=args.predictor_regularization,
+                include_drift=not args.no_drift,
+            )
+        )
+        if args.output:
+            write_json_result(result, args.output)
+        print(json.dumps(result, indent=2, sort_keys=True))
+    elif args.command == "polarity":
+        result = run_polarity_comparison(
+            PolarityComparisonConfig(
+                seeds=tuple(args.seeds),
+                test_per_class=args.test_per_class,
+                augmentation_copies=args.augmentation_copies,
                 include_drift=not args.no_drift,
             )
         )

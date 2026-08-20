@@ -461,6 +461,8 @@ DigitsKind = Literal[
     "key_value_entropy",
     "managed16_pixels",
     "managed16_fixed_conv",
+    "managed16_absolute_conv",
+    "managed16_signed_magnitude_conv",
     "managed16_predictive_conv",
 ]
 
@@ -480,6 +482,8 @@ def build_digits_learner(
     if kind in (
         "managed16_pixels",
         "managed16_fixed_conv",
+        "managed16_absolute_conv",
+        "managed16_signed_magnitude_conv",
         "managed16_predictive_conv",
     ):
         if config.hidden_size != 64:
@@ -506,7 +510,14 @@ def build_digits_learner(
                 ),
                 readout,
             )
-        frontend = "pixels" if kind == "managed16_pixels" else "fixed_convolution"
+        frontend = {
+            "managed16_pixels": "pixels",
+            "managed16_fixed_conv": "fixed_convolution",
+            "managed16_absolute_conv": "absolute_convolution",
+            "managed16_signed_magnitude_conv": (
+                "signed_magnitude_convolution"
+            ),
+        }[kind]
         return OnlineSpatialClassifier(
             SpatialClassifierConfig(
                 image_size=8,
