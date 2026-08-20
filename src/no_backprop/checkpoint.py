@@ -58,7 +58,10 @@ def save_checkpoint(learner: OnlineReservoir, destination: str | Path) -> Path:
             "error_count",
             "recruitment_candidate_count",
             "entropy_rejection_count",
+            "leverage_rejection_count",
             "proximity_rejection_count",
+            "normalized_leverage_sum",
+            "normalized_leverage_count",
         )
         arrays.update(
             {
@@ -160,7 +163,10 @@ def restore_checkpoint(learner: OnlineReservoir, source: str | Path) -> None:
                 "error_count",
                 "recruitment_candidate_count",
                 "entropy_rejection_count",
+                "leverage_rejection_count",
                 "proximity_rejection_count",
+                "normalized_leverage_sum",
+                "normalized_leverage_count",
             )
             for name in maturity_names:
                 checkpoint_name = f"readout_maturity_{name}"

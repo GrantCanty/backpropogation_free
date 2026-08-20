@@ -435,6 +435,7 @@ DigitsKind = Literal[
     "cumulative_memory",
     "maturity",
     "maturity_entropy",
+    "maturity_leverage",
     "key_value",
     "key_value_entropy",
 ]
@@ -500,7 +501,7 @@ def build_digits_learner(
             regularization=config.cumulative_regularization,
             rank_bins=config.cumulative_rank_bins,
         )
-    elif kind in ("maturity", "maturity_entropy"):
+    elif kind in ("maturity", "maturity_entropy", "maturity_leverage"):
         readout = CumulativeMaturityReadout(
             feature_size,
             10,
@@ -510,6 +511,7 @@ def build_digits_learner(
             rbf_width=config.maturity_rbf_width,
             min_center_distance=config.maturity_min_center_distance,
             entropy_gated=kind == "maturity_entropy",
+            leverage_gated=kind == "maturity_leverage",
         )
     elif kind in ("key_value", "key_value_entropy"):
         readout = KeyValueMaturityReadout(
@@ -624,7 +626,10 @@ def _learner_training_arrays(learner: OnlineReservoir) -> tuple[np.ndarray, ...]
                 learner.readout.error_count,
                 learner.readout.recruitment_candidate_count,
                 learner.readout.entropy_rejection_count,
+                learner.readout.leverage_rejection_count,
                 learner.readout.proximity_rejection_count,
+                learner.readout.normalized_leverage_sum,
+                learner.readout.normalized_leverage_count,
             ]
         )
         if isinstance(learner.readout, KeyValueMaturityReadout):

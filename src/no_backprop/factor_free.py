@@ -34,6 +34,7 @@ class FactorFreeMemoryConfig:
         "cumulative_memory",
         "maturity",
         "maturity_entropy",
+        "maturity_leverage",
         "key_value",
         "key_value_entropy",
         "rls",
@@ -97,6 +98,9 @@ def run_factor_free_drift(config: FactorFreeMemoryConfig) -> dict[str, Any]:
             "maturity_entropy": run_drift_model(
                 "maturity_entropy", milestone_config
             ),
+            "maturity_leverage": run_drift_model(
+                "maturity_leverage", milestone_config
+            ),
             "key_value": run_drift_model("key_value", milestone_config),
             "key_value_entropy": run_drift_model(
                 "key_value_entropy", milestone_config
@@ -133,6 +137,7 @@ def run_factor_free_memory(
         if kind in (
             "maturity",
             "maturity_entropy",
+            "maturity_leverage",
             "key_value",
             "key_value_entropy",
         )
@@ -153,6 +158,11 @@ def run_factor_free_memory(
             "single_prediction_path_in_maturity_models": True,
             "every_observation_updates_maturity_statistics": all(
                 run["maturity_diagnostics"]["samples_in_cumulative_statistics"]
+                == run["trained_samples"]
+                for run in maturity_runs
+            ),
+            "every_observation_updates_leverage_statistics": all(
+                run["maturity_diagnostics"]["samples_in_leverage_statistics"]
                 == run["trained_samples"]
                 for run in maturity_runs
             ),

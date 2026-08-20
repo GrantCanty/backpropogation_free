@@ -80,10 +80,13 @@ retained, and no observation is aged out. The first architecture routes between
 slow and residual memories. The maturity architectures instead use one
 prediction path and a shared representation containing recruitable local
 neurons; the matched entropy variant suppresses recruitment on high-entropy
-startup mistakes. The adaptive key-value variants treat the recurrent feature
-as a query, each local neuron center as a learned key, its diagonal variance as
-the locality rule, and its output-weight column as a value. Key updates use
-local cumulative statistics rather than gradients or a backward pass.
+startup mistakes. The leverage variant instead delays recruitment until an
+error occurs at below-average RLS novelty, using a cumulative learned baseline
+rather than a threshold. The adaptive key-value variants treat the recurrent
+feature as a query, each local neuron center as a learned key, its diagonal
+variance as the locality rule, and its output-weight column as a value. Key
+updates use local cumulative statistics rather than gradients or a backward
+pass.
 
 ## Architecture
 
@@ -132,6 +135,9 @@ The controlled MVP passes the five gates in `PLAN.md`:
   77.98% while leaving ordered final accuracy nearly unchanged (89.67% to
   89.75%); this costs 24% more state and roughly 6% more training time than the
   fixed-key control on the current vectorized CPU benchmark
+- across 10 seeds, RLS-leverage-gated recruitment raises fixed-key ordered final
+  accuracy from 90.25% to 90.78%; the nominal paired 95% interval is only +0.05
+  to +1.01 points, so this is a modest result rather than definitive evidence
 
 These results validate the experimental machinery and the narrow MVP
 hypotheses. They do **not** establish an advantage on real-world data or prove
@@ -142,8 +148,8 @@ that local learning generally outperforms backpropagation. See
 
 The `memory` branch now tests factor-free complementary, single-path maturity,
 and adaptive key-value representations. The next mechanism problem is reducing
-the key learner's basis drift and cost, then scaling neuron capacity and
-calibrating uncertainty without sacrificing the cumulative invariant.
+basis drift with probationary frozen keys, then scaling neuron capacity without
+sacrificing the cumulative invariant.
 JEPA-inspired predictive representations remain a later experiment; they are
 not an I-JEPA reimplementation, and no automatic differentiation or backward
 pass enters the core learner.

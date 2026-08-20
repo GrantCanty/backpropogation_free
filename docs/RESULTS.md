@@ -420,6 +420,54 @@ accuracy. Broad neurons adapt by activating across established classes. Entropy
 reduces that failure to 84.99% online and 60.83% final, but cannot make broad
 features stable. Narrow width 0.05 restores approximately 90% final retention.
 
+### RLS-leverage recruitment gate
+
+Entropy is an indirect novelty estimate computed from uncalibrated output
+scores. The leverage variant instead uses the inverse correlation matrix that
+already drives RLS. Before each update it computes
+
+\[
+h = x^\mathsf{T} P x, \qquad \tilde h = \frac{h}{1+h}.
+\]
+
+High leverage means the representation is unfamiliar. A prediction error may
+recruit a neuron only when its normalized leverage is below the cumulative
+pre-update mean. Thus an unfamiliar startup error first updates the shared
+model; recruitment becomes possible if the region remains erroneous after it
+becomes familiar. The mean includes every prior observation with unit weight,
+so there is no hand-set threshold, forgetting factor, or age window.
+
+The fixed-key comparison uses 10 matched seeds (3, 7, 11, 17, 23, 29, 37, 41,
+47, and 53):
+
+| Recruitment | Shuffled online | Shuffled final | Ordered online | Ordered final | Ordered forgetting |
+|---|---:|---:|---:|---:|---:|
+| Ungated | 85.11% | 90.78% | 76.90% | 90.25% | 4.13 points |
+| Entropy | **85.32%** | 90.80% | 76.56% | 90.43% | 4.10 points |
+| RLS leverage | 85.29% | **90.95%** | **77.24%** | **90.78%** | **3.73 points** |
+
+Against the ungated control, leverage changes shuffled online by +0.18 points,
+shuffled final by +0.18, ordered online by +0.34, ordered final by +0.53, and
+ordered forgetting by -0.40. Paired 95% Student-t intervals respectively have
+half-widths of 0.45, 0.32, 0.50, 0.48, and 0.45 points. Only ordered final
+narrowly excludes zero, and these nominal intervals are not corrected for the
+multiple comparisons. Entropy remains mixed at 10 seeds rather than becoming a
+clear improvement.
+
+Leverage rejects 5.1 early errors on average shuffled and 17.3 ordered, but
+still fills all 32 neuron slots. Entropy rejects 172.8 and 320.4 errors and
+finishes with 24.1 and 6.6 active neurons. Leverage therefore improves which
+early observations become centers; it does not solve capacity allocation.
+Every rejected observation still updates both the cumulative output model and
+the leverage baseline.
+
+On the 10-seed original/inverted/original benchmark, leverage finishes at
+88.58% original and 75.88% inverted versus 88.20% and 75.93% for ungated
+maturity. The +0.38-point original-domain change has a nominal paired interval
+of approximately +0.02 to +0.74 points; inverted performance is unchanged.
+This supports leverage as a modestly better recruitment default, not as a major
+adaptation breakthrough.
+
 ### Adaptive key-value neuron experiment
 
 The attention-inspired variant keeps the same single output path but makes each
@@ -490,8 +538,9 @@ calibrate predictive uncertainty, and scale the neuron bank.
 - Per-synapse eligibility scales quadratically in a dense recurrent layer.
 - There is no adversarial update protection or production safety layer.
 - Retention still declines when context zero returns.
-- The image results are only three seeds on a small bundled dataset, and their
-  hyperparameters were transferred rather than formally tuned.
+- Most image results are only three seeds on a small bundled dataset. The
+  leverage experiment uses 10 seeds, but its intervals are not corrected for
+  multiple comparisons, and hyperparameters were not formally tuned.
 - The augmentation doubles exposure; it has not yet been compared with simply
   repeating the original stream for the same number of updates.
 - RLS's strong retention uses quadratic state, so it is not yet a scalable
@@ -506,6 +555,8 @@ calibrate predictive uncertainty, and scale the neuron bank.
 - The maturity model preallocates 32 neuron slots. The fixed-key control uses a
   hand-set RBF width; the adaptive variant still requires safety bounds and
   computes entropy from uncalibrated scores.
+- The threshold-free leverage gate delays poor recruitment but still fills all
+  32 slots, so it does not address long-run capacity allocation.
 - Adaptive keys introduce nonlinear basis drift, add 24% state and about 6%
   NumPy CPU time, and have only a small three-seed adaptation gain.
 - Past observations have no counterfactual activations for neurons recruited
@@ -513,5 +564,6 @@ calibrate predictive uncertainty, and scale the neuron bank.
   replay, but does not provide a formal non-interference guarantee.
 
 The next mechanism experiment should keep the cumulative single-path invariant
-while correcting or avoiding adaptive-key basis drift. Entropy calibration and
-a capacity-width scaling study should precede learned or expanding encoders.
+while correcting or avoiding adaptive-key basis drift with probationary frozen
+keys. A capacity-width scaling study should precede learned or expanding
+encoders.

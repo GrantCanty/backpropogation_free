@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from no_backprop.checkpoint import restore_checkpoint, save_checkpoint
 from no_backprop.digits import DigitsSplit
@@ -47,6 +48,14 @@ def test_maturity_models_have_no_forgetting_or_decay_parameter() -> None:
         fields = readout_class.__dataclass_fields__
         assert "forgetting_factor" not in fields
         assert "decay" not in fields
+        assert "leverage_threshold" not in fields
+
+
+def test_entropy_and_leverage_gates_are_mutually_exclusive() -> None:
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        CumulativeMaturityReadout(
+            2, 2, entropy_gated=True, leverage_gated=True
+        )
 
 
 def test_entropy_blocks_uniform_startup_error_but_control_recruits() -> None:
@@ -82,6 +91,27 @@ def test_entropy_recruits_after_confident_error() -> None:
     assert readout.neuron_recruitment_entropy[0] < 1.0
 
 
+def test_leverage_gate_waits_until_an_error_region_is_familiar() -> None:
+    readout = CumulativeMaturityReadout(
+        2, 2, max_neurons=2, leverage_gated=True
+    )
+    feature = np.array([1.0, 0.0])
+    first_target = np.array([0.0, 1.0])
+    changed_target = np.array([1.0, 0.0])
+
+    prediction = readout.predict(feature)
+    readout.update(feature, first_target, prediction)
+    assert readout.diagnostics["active_neurons"] == 0
+    assert readout.diagnostics["leverage_rejections"] == 1
+
+    prediction = readout.predict(feature)
+    readout.update(feature, changed_target, prediction)
+    assert readout.diagnostics["active_neurons"] == 1
+    assert readout.diagnostics["samples_in_cumulative_statistics"] == 2
+    assert readout.diagnostics["samples_in_leverage_statistics"] == 2
+    assert 0.0 < readout.diagnostics["mean_normalized_leverage"] < 1.0
+
+
 def test_recruited_neuron_accumulates_maturity_evidence() -> None:
     readout = CumulativeMaturityReadout(
         2, 2, max_neurons=2, min_center_distance=0.01
@@ -108,6 +138,7 @@ def test_maturity_variants_run_locked_with_bounded_capacity() -> None:
     for kind in (
         "maturity",
         "maturity_entropy",
+        "maturity_leverage",
         "key_value",
         "key_value_entropy",
     ):

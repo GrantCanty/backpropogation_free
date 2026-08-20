@@ -588,8 +588,11 @@ class CumulativeMaturityReadout:
 
     When ``entropy_gated`` is true, an error recruits capacity only when its
     predictive entropy is below the cumulative mean entropy of correct
-    predictions.  The matched control recruits on any representationally
-    distinct error.
+    predictions.  When ``leverage_gated`` is true, recruitment requires the
+    current normalized RLS leverage to be below its cumulative pre-update mean:
+    an error must occur in a region that the model has already observed enough
+    to consider familiar.  The matched control recruits on any
+    representationally distinct error.
     """
 
     input_size: int
@@ -600,6 +603,7 @@ class CumulativeMaturityReadout:
     rbf_width: float = 0.05
     min_center_distance: float = 0.01
     entropy_gated: bool = False
+    leverage_gated: bool = False
 
     def __post_init__(self) -> None:
         if self.regularization <= 0.0:
@@ -610,6 +614,8 @@ class CumulativeMaturityReadout:
             raise ValueError("rbf_width must be positive")
         if self.min_center_distance < 0.0:
             raise ValueError("min_center_distance cannot be negative")
+        if self.entropy_gated and self.leverage_gated:
+            raise ValueError("entropy and leverage gates are mutually exclusive")
 
         self.expanded_size = self.input_size + self.max_neurons
         self.expanded_weights = np.zeros(
@@ -634,12 +640,16 @@ class CumulativeMaturityReadout:
         self.error_count = np.zeros(1, dtype=np.float64)
         self.recruitment_candidate_count = np.zeros(1, dtype=np.float64)
         self.entropy_rejection_count = np.zeros(1, dtype=np.float64)
+        self.leverage_rejection_count = np.zeros(1, dtype=np.float64)
         self.proximity_rejection_count = np.zeros(1, dtype=np.float64)
+        self.normalized_leverage_sum = np.zeros(1, dtype=np.float64)
+        self.normalized_leverage_count = np.zeros(1, dtype=np.float64)
 
         self._last_features: FloatArray | None = None
         self._last_expanded: FloatArray | None = None
         self._last_prediction: FloatArray | None = None
         self._last_entropy = 1.0
+        self._last_normalized_leverage = 1.0
 
     @property
     def weights(self) -> FloatArray:
@@ -688,6 +698,21 @@ class CumulativeMaturityReadout:
         correct_mean = self.correct_entropy_sum[0] / correct_count
         return self._last_entropy + np.finfo(float).eps < correct_mean
 
+    def _leverage_allows_recruitment(self) -> bool:
+        if not self.leverage_gated:
+            return True
+        count = self.normalized_leverage_count[0]
+        if count == 0.0:
+            return False
+        mean = self.normalized_leverage_sum[0] / count
+        return self._last_normalized_leverage + np.finfo(float).eps < mean
+
+    def _gate_allows_recruitment(self) -> bool:
+        return (
+            self._entropy_allows_recruitment()
+            and self._leverage_allows_recruitment()
+        )
+
     def _recruit(self, features: FloatArray, target_class: int) -> None:
         index = int(self.active_count[0])
         self.neuron_centers[index] = features
@@ -712,6 +737,9 @@ class CumulativeMaturityReadout:
         ):
             raise RuntimeError("predict must be called before update")
 
+        projected = self.inverse_correlation @ self._last_expanded
+        leverage = max(0.0, float(self._last_expanded @ projected))
+        self._last_normalized_leverage = leverage / (1.0 + leverage)
         active_before_update = int(self.active_count[0])
         target_class = int(np.argmax(target))
         predicted_class = int(np.argmax(self._last_prediction))
@@ -723,20 +751,22 @@ class CumulativeMaturityReadout:
             self.error_count[0] += 1.0
             self.recruitment_candidate_count[0] += 1.0
             capacity_available = int(self.active_count[0]) < self.max_neurons
-            entropy_allowed = self._entropy_allows_recruitment()
+            gate_allowed = self._gate_allows_recruitment()
             distinct = self._is_distinct(features)
-            if capacity_available and entropy_allowed and distinct:
+            if capacity_available and gate_allowed and distinct:
                 self._recruit(features, target_class)
                 # The recruiting observation immediately trains the new unit.
                 self._last_expanded = self._expanded_features(features)
-            elif capacity_available and not entropy_allowed:
+                projected = self.inverse_correlation @ self._last_expanded
+            elif capacity_available and not gate_allowed and self.entropy_gated:
                 self.entropy_rejection_count[0] += 1.0
+            elif capacity_available and not gate_allowed and self.leverage_gated:
+                self.leverage_rejection_count[0] += 1.0
             elif capacity_available and not distinct:
                 self.proximity_rejection_count[0] += 1.0
 
         expanded = self._last_expanded
         prediction_for_update = self.expanded_weights @ expanded
-        projected = self.inverse_correlation @ expanded
         denominator = 1.0 + float(expanded @ projected)
         gain = projected / denominator
         self.expanded_weights += np.outer(target - prediction_for_update, gain)
@@ -749,6 +779,8 @@ class CumulativeMaturityReadout:
         self._update_neuron_statistics(
             features, expanded[self.input_size :], active_before_update
         )
+        self.normalized_leverage_sum[0] += self._last_normalized_leverage
+        self.normalized_leverage_count[0] += 1.0
         self.sample_count[0] += 1.0
 
         self._last_features = None
@@ -772,8 +804,10 @@ class CumulativeMaturityReadout:
         evidence = self.neuron_evidence[:count]
         maturity = evidence / (self.regularization + evidence)
         correct_count = self.correct_entropy_count[0]
+        leverage_count = self.normalized_leverage_count[0]
         return {
             "entropy_gated": self.entropy_gated,
+            "leverage_gated": self.leverage_gated,
             "samples_in_cumulative_statistics": int(self.sample_count[0]),
             "stored_raw_samples": 0,
             "active_neurons": count,
@@ -790,12 +824,19 @@ class CumulativeMaturityReadout:
             "observed_errors": int(self.error_count[0]),
             "recruitment_candidates": int(self.recruitment_candidate_count[0]),
             "entropy_rejections": int(self.entropy_rejection_count[0]),
+            "leverage_rejections": int(self.leverage_rejection_count[0]),
             "proximity_rejections": int(self.proximity_rejection_count[0]),
             "mean_correct_prediction_entropy": (
                 0.0
                 if correct_count == 0.0
                 else float(self.correct_entropy_sum[0] / correct_count)
             ),
+            "mean_normalized_leverage": (
+                0.0
+                if leverage_count == 0.0
+                else float(self.normalized_leverage_sum[0] / leverage_count)
+            ),
+            "samples_in_leverage_statistics": int(leverage_count),
         }
 
     @property
@@ -815,7 +856,10 @@ class CumulativeMaturityReadout:
             self.error_count,
             self.recruitment_candidate_count,
             self.entropy_rejection_count,
+            self.leverage_rejection_count,
             self.proximity_rejection_count,
+            self.normalized_leverage_sum,
+            self.normalized_leverage_count,
         )
         return sum(array.nbytes for array in arrays)
 
