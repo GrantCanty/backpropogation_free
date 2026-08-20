@@ -508,6 +508,47 @@ zero, so there is no detected drift benefit or stability regression. The result
 is specifically a modest improvement in online sample efficiency: averaging a
 confirmed key is better than exposing the first qualifying error immediately.
 
+### Local-responsibility experiment
+
+The local-memory representation is made dynamically sparse by retaining only
+the strongest key activations for each observation. The reservoir state and
+base RLS features remain dense. Every policy is used from the start of training;
+no model is trained dense and switched afterward. The comparison covers dense,
+unnormalized top-4, top-2, winner-only, and normalized top-4/top-2 activation.
+
+Ten-seed means are:
+
+| Responsibility | Shuffled online | Shuffled final | Ordered online | Ordered final | Mean active keys (shuf./ord.) |
+|---|---:|---:|---:|---:|---:|
+| Dense probation | **85.74%** | **90.98%** | 77.72% | **90.58%** | 32.0 / 32.0 |
+| Top-4 | 85.68% | 90.85% | 77.70% | 90.50% | 3.89 / 3.08 |
+| Top-2 | 85.71% | 90.70% | 77.65% | 90.55% | 1.96 / 1.56 |
+| Winner-only | 85.63% | 90.55% | 77.39% | 90.45% | 0.99 / 0.79 |
+| Normalized top-4 | 83.71% | 89.85% | **86.30%** | 67.65% | 3.89 / 3.01 |
+| Normalized top-2 | 82.91% | 88.78% | 85.40% | 66.23% | 1.96 / 1.55 |
+
+Unnormalized sparsity does not improve quality. Top-4 differs from dense by
+-0.06 points shuffled-online, -0.13 shuffled-final, -0.01 ordered-online, and
+-0.08 ordered-final; all paired intervals include zero. Winner-only reduces
+ordered-online accuracy by 0.32 points with a nominal paired interval of -0.58
+to -0.06, and trends toward worse retention.
+
+This NumPy implementation also receives no compute benefit from zeroing key
+features: exact RLS still multiplies the full inverse-correlation matrix, while
+top-k selection adds roughly 9–10% training time. Sparse responsibility becomes
+a systems optimization only if paired with a sparse/block update rule.
+
+Normalized local attention is a clear failure. It raises ordered online
+accuracy by 8.58 points for top-4 and 7.69 for top-2, but lowers ordered final
+accuracy by 22.93 and 24.35 points. When all matches are weak, normalization
+still forces them to sum to one; class ordering then produces a large transient
+response that overwhelms stable representation. No minimum-similarity threshold
+was added after seeing this result.
+
+Dense probation remains the foundation for the next experiment. The sparse
+variants stay available as matched negative controls and as possible inputs to
+later sparse-RLS scaling work.
+
 ### Adaptive key-value neuron experiment
 
 The attention-inspired variant keeps the same single output path but makes each
@@ -599,6 +640,8 @@ calibrate predictive uncertainty, and scale the neuron bank.
   32 slots, so it does not address long-run capacity allocation.
 - Probation improves online accuracy without improving final accuracy. Its
   candidate bank adds 12.6% state and can accumulate stranded proposals.
+- Dense local responsibility remains best. Top-k adds selection overhead without
+  reducing exact-RLS work, while normalization causes severe ordered forgetting.
 - Adaptive keys introduce nonlinear basis drift, add 24% state and about 6%
   NumPy CPU time, and have only a small three-seed adaptation gain.
 - Past observations have no counterfactual activations for neurons recruited
@@ -606,6 +649,6 @@ calibrate predictive uncertainty, and scale the neuron bank.
   replay, but does not provide a formal non-interference guarantee.
 
 The next mechanism experiment should keep the cumulative single-path invariant
-while testing local responsibility so overlapping neurons do not all respond to
-the same observation. A capacity-width scaling study should precede learned or
-expanding encoders.
+while reducing stranded candidate representations and managing bounded
+capacity. A capacity-width scaling study should precede learned or expanding
+encoders.

@@ -14,6 +14,7 @@ from no_backprop.readouts import (
     CumulativeMaturityReadout,
     KeyValueMaturityReadout,
     ProbationaryMaturityReadout,
+    ResponsibleProbationaryMaturityReadout,
     _normalized_entropy,
 )
 
@@ -49,6 +50,7 @@ def test_maturity_models_have_no_forgetting_or_decay_parameter() -> None:
         CumulativeMaturityReadout,
         KeyValueMaturityReadout,
         ProbationaryMaturityReadout,
+        ResponsibleProbationaryMaturityReadout,
     ):
         fields = readout_class.__dataclass_fields__
         assert "forgetting_factor" not in fields
@@ -153,6 +155,34 @@ def test_probation_requires_confirmation_then_freezes_key() -> None:
     assert readout.diagnostics["stored_raw_samples"] == 0
 
 
+@pytest.mark.parametrize(
+    ("top_k", "normalized"),
+    ((4, False), (2, False), (1, False), (4, True), (2, True)),
+)
+def test_local_responsibility_sparsifies_only_key_activities(
+    top_k: int, normalized: bool
+) -> None:
+    readout = ResponsibleProbationaryMaturityReadout(
+        1,
+        2,
+        max_neurons=4,
+        rbf_width=1.0,
+        responsibility_k=top_k,
+        normalize_responsibility=normalized,
+    )
+    for center in (0.0, 1.0, 2.0):
+        CumulativeMaturityReadout._recruit(
+            readout, np.array([center]), target_class=0
+        )
+
+    activities = readout._activities(np.array([0.2]))
+    assert np.count_nonzero(activities) == min(3, top_k)
+    if normalized:
+        assert np.isclose(np.sum(activities), 1.0)
+    else:
+        assert np.sum(activities) < min(3, top_k)
+
+
 def test_recruited_neuron_accumulates_maturity_evidence() -> None:
     readout = CumulativeMaturityReadout(
         2, 2, max_neurons=2, min_center_distance=0.01
@@ -181,6 +211,11 @@ def test_maturity_variants_run_locked_with_bounded_capacity() -> None:
         "maturity_entropy",
         "maturity_leverage",
         "maturity_probation",
+        "probation_top4",
+        "probation_top2",
+        "probation_winner",
+        "probation_top4_normalized",
+        "probation_top2_normalized",
         "key_value",
         "key_value_entropy",
     ):
@@ -311,6 +346,27 @@ def test_probation_checkpoint_round_trip(tmp_path) -> None:
     expected = _process_digit_image(learner, evaluation_image, target=None)
 
     restored = build_digits_learner("maturity_probation", config)
+    restore_checkpoint(restored, path)
+    actual = _process_digit_image(restored, evaluation_image, target=None)
+    np.testing.assert_allclose(actual, expected)
+    assert restored.readout.diagnostics == learner.readout.diagnostics
+
+
+def test_local_responsibility_checkpoint_round_trip(tmp_path) -> None:
+    config = DigitsExperimentConfig(
+        hidden_size=8, seed=19, maturity_max_neurons=4
+    )
+    learner = build_digits_learner("probation_top2_normalized", config)
+    rng = np.random.default_rng(19)
+    for label in (3, 8, 3, 0, 8):
+        _process_digit_image(
+            learner, rng.uniform(size=(8, 8)), target=_digit_target(label)
+        )
+    path = save_checkpoint(learner, tmp_path / "responsibility.npz")
+    evaluation_image = rng.uniform(size=(8, 8))
+    expected = _process_digit_image(learner, evaluation_image, target=None)
+
+    restored = build_digits_learner("probation_top2_normalized", config)
     restore_checkpoint(restored, path)
     actual = _process_digit_image(restored, evaluation_image, target=None)
     np.testing.assert_allclose(actual, expected)

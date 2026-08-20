@@ -36,6 +36,11 @@ class FactorFreeMemoryConfig:
         "maturity_entropy",
         "maturity_leverage",
         "maturity_probation",
+        "probation_top4",
+        "probation_top2",
+        "probation_winner",
+        "probation_top4_normalized",
+        "probation_top2_normalized",
         "key_value",
         "key_value_entropy",
         "rls",
@@ -151,7 +156,15 @@ def run_factor_free_memory(
         model
         for models in quality.values()
         for kind, model in models.items()
-        if kind == "maturity_probation"
+        if kind
+        in (
+            "maturity_probation",
+            "probation_top4",
+            "probation_top2",
+            "probation_winner",
+            "probation_top4_normalized",
+            "probation_top2_normalized",
+        )
     ]
     return {
         "experiment": "factor_free_cumulative_representation_memory",

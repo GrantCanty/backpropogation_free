@@ -32,6 +32,7 @@ from no_backprop.readouts import (
     ProbationaryMaturityReadout,
     ProtectedFastSlowReadout,
     PrototypeReadout,
+    ResponsibleProbationaryMaturityReadout,
     RLSReadout,
 )
 from no_backprop.reservoir import OnlineReservoir, ReservoirConfig
@@ -438,6 +439,11 @@ DigitsKind = Literal[
     "maturity_entropy",
     "maturity_leverage",
     "maturity_probation",
+    "probation_top4",
+    "probation_top2",
+    "probation_winner",
+    "probation_top4_normalized",
+    "probation_top2_normalized",
     "key_value",
     "key_value_entropy",
 ]
@@ -524,6 +530,31 @@ def build_digits_learner(
             max_neurons=config.maturity_max_neurons,
             rbf_width=config.maturity_rbf_width,
             min_center_distance=config.maturity_min_center_distance,
+        )
+    elif kind in (
+        "probation_top4",
+        "probation_top2",
+        "probation_winner",
+        "probation_top4_normalized",
+        "probation_top2_normalized",
+    ):
+        responsibility_k = {
+            "probation_top4": 4,
+            "probation_top2": 2,
+            "probation_winner": 1,
+            "probation_top4_normalized": 4,
+            "probation_top2_normalized": 2,
+        }[kind]
+        readout = ResponsibleProbationaryMaturityReadout(
+            feature_size,
+            10,
+            seed=config.seed,
+            regularization=config.cumulative_regularization,
+            max_neurons=config.maturity_max_neurons,
+            rbf_width=config.maturity_rbf_width,
+            min_center_distance=config.maturity_min_center_distance,
+            responsibility_k=responsibility_k,
+            normalize_responsibility=kind.endswith("_normalized"),
         )
     elif kind in ("key_value", "key_value_entropy"):
         readout = KeyValueMaturityReadout(
@@ -662,6 +693,13 @@ def _learner_training_arrays(learner: OnlineReservoir) -> tuple[np.ndarray, ...]
                     learner.readout.candidates_created,
                     learner.readout.candidates_promoted,
                     learner.readout.candidate_pool_rejections,
+                ]
+            )
+        if isinstance(learner.readout, ResponsibleProbationaryMaturityReadout):
+            arrays.extend(
+                [
+                    learner.readout.responsible_key_sum,
+                    learner.readout.responsibility_sample_count,
                 ]
             )
     elif isinstance(learner.readout, CumulativeMemoryReadout):

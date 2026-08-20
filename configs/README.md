@@ -9,4 +9,5 @@ the lazy 8x8/28x28 systems benchmark is in `scaling.json`.
 The factor-free complementary-memory defaults are in
 `factor_free_memory.json`; it includes fixed-key ungated, entropy-gated, and
 RLS-leverage-gated controls, probationary frozen keys, and adaptive key-value
-maturity variants.
+maturity variants. It also includes dense, top-k, winner-only, and normalized
+local-responsibility controls.

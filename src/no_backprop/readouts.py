@@ -999,6 +999,77 @@ class ProbationaryMaturityReadout(CumulativeMaturityReadout):
 
 
 @dataclass
+class ResponsibleProbationaryMaturityReadout(ProbationaryMaturityReadout):
+    """Probationary memory with dynamically sparse local-key responsibility."""
+
+    responsibility_k: int = 4
+    normalize_responsibility: bool = False
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.responsibility_k <= 0:
+            raise ValueError("responsibility_k must be positive")
+        self.responsible_key_sum = np.zeros(1, dtype=np.float64)
+        self.responsibility_sample_count = np.zeros(1, dtype=np.float64)
+
+    def _activities(self, features: FloatArray) -> FloatArray:
+        activities = super()._activities(features)
+        count = int(self.active_count[0])
+        keep = min(count, self.responsibility_k)
+        if keep == 0:
+            return activities
+        if keep < count:
+            active_values = activities[:count]
+            selected = np.argpartition(active_values, -keep)[-keep:]
+            sparse = np.zeros_like(activities)
+            sparse[selected] = active_values[selected]
+            activities = sparse
+        if self.normalize_responsibility:
+            total = float(np.sum(activities))
+            if total > np.finfo(float).tiny:
+                activities /= total
+        return activities
+
+    def _update_neuron_statistics(
+        self,
+        features: FloatArray,
+        activities: FloatArray,
+        active_before_update: int,
+    ) -> None:
+        super()._update_neuron_statistics(
+            features, activities, active_before_update
+        )
+        self.responsible_key_sum[0] += float(np.count_nonzero(activities))
+        self.responsibility_sample_count[0] += 1.0
+
+    @property
+    def diagnostics(self) -> dict[str, float | int | bool]:
+        result = super().diagnostics
+        count = self.responsibility_sample_count[0]
+        result.update(
+            {
+                "sparse_local_responsibility": True,
+                "responsibility_k": self.responsibility_k,
+                "normalized_responsibility": self.normalize_responsibility,
+                "mean_responsible_keys": (
+                    0.0
+                    if count == 0.0
+                    else float(self.responsible_key_sum[0] / count)
+                ),
+            }
+        )
+        return result
+
+    @property
+    def state_nbytes(self) -> int:
+        return (
+            super().state_nbytes
+            + self.responsible_key_sum.nbytes
+            + self.responsibility_sample_count.nbytes
+        )
+
+
+@dataclass
 class KeyValueMaturityReadout(CumulativeMaturityReadout):
     """Maturity network whose recruited keys and locality learn cumulatively.
 

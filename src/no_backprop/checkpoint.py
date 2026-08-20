@@ -19,6 +19,7 @@ from no_backprop.readouts import (
     ProbationaryMaturityReadout,
     ProtectedFastSlowReadout,
     PrototypeReadout,
+    ResponsibleProbationaryMaturityReadout,
     RLSReadout,
 )
 from no_backprop.reservoir import OnlineReservoir
@@ -89,6 +90,13 @@ def save_checkpoint(learner: OnlineReservoir, destination: str | Path) -> Path:
                 arrays[f"readout_probation_{name}"] = getattr(
                     learner.readout, name
                 )
+        if isinstance(learner.readout, ResponsibleProbationaryMaturityReadout):
+            arrays["readout_responsible_key_sum"] = (
+                learner.readout.responsible_key_sum
+            )
+            arrays["readout_responsibility_sample_count"] = (
+                learner.readout.responsibility_sample_count
+            )
     elif isinstance(learner.readout, CumulativeMemoryReadout):
         arrays.update(
             {
@@ -215,6 +223,19 @@ def restore_checkpoint(learner: OnlineReservoir, source: str | Path) -> None:
                         arrays[checkpoint_name],
                         checkpoint_name,
                     )
+            if isinstance(
+                learner.readout, ResponsibleProbationaryMaturityReadout
+            ):
+                _copy_array(
+                    learner.readout.responsible_key_sum,
+                    arrays["readout_responsible_key_sum"],
+                    "readout_responsible_key_sum",
+                )
+                _copy_array(
+                    learner.readout.responsibility_sample_count,
+                    arrays["readout_responsibility_sample_count"],
+                    "readout_responsibility_sample_count",
+                )
         elif isinstance(learner.readout, CumulativeMemoryReadout):
             cumulative_arrays = (
                 ("slow_weights", "readout_slow_weights"),

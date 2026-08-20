@@ -143,6 +143,10 @@ The controlled MVP passes the five gates in `PLAN.md`:
 - adding probationary frozen keys to leverage gating raises shuffled and ordered
   online accuracy by 0.45 and 0.47 points across 10 seeds without a detectable
   final-accuracy or drift change; the dormant bank adds 12.6% state
+- explicit top-k local responsibility does not improve the probation model:
+  unnormalized top-4 is slightly slower with matched quality, winner-only loses
+  ordered online accuracy, and normalized top-k catastrophically harms final
+  retention by forcing weak matches to carry unit activation
 
 These results validate the experimental machinery and the narrow MVP
 hypotheses. They do **not** establish an advantage on real-world data or prove
@@ -153,8 +157,8 @@ that local learning generally outperforms backpropagation. See
 
 The `memory` branch now tests factor-free complementary, single-path maturity,
 and adaptive key-value representations. The next mechanism problem is reducing
-overlapping neuron updates through local responsibility, then scaling neuron
-capacity without sacrificing the cumulative invariant.
+stranded probation candidates and managing bounded capacity without sacrificing
+the cumulative invariant.
 JEPA-inspired predictive representations remain a later experiment; they are
 not an I-JEPA reimplementation, and no automatic differentiation or backward
 pass enters the core learner.
