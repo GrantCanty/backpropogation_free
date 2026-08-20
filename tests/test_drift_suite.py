@@ -125,3 +125,7 @@ def test_drift_suite_rejects_invalid_configuration() -> None:
         DriftSuiteConfig(seeds=(3, 3))
     with pytest.raises(ValueError, match="contrast_scale"):
         DriftSuiteConfig(seeds=(3,), contrast_scale=1.0)
+    with pytest.raises(ValueError, match="signed-magnitude baseline"):
+        DriftSuiteConfig(seeds=(3,), kinds=("managed16_fixed_conv",))
+    with pytest.raises(ValueError, match="predictor_regularization"):
+        DriftSuiteConfig(seeds=(3,), predictor_regularization=0.0)

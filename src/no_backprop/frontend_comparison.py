@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import Any
 
 import numpy as np
 
+from no_backprop.drift_suite import (
+    DriftSuiteConfig,
+    TransformationName,
+    run_drift_suite,
+)
 from no_backprop.digits import (
     DigitsProtocol,
     DigitsSplit,
@@ -44,6 +49,13 @@ POLARITY_KINDS: tuple[DigitsKind, ...] = (
     "managed16_signed_magnitude_conv",
 )
 
+PREDICTIVE_SURPRISE_KINDS: tuple[DigitsKind, ...] = (
+    "managed16_signed_magnitude_conv",
+    "managed16_predictor_control",
+    "managed16_predictive_surprise",
+    "managed16_lagged_surprise",
+)
+
 
 @dataclass(frozen=True)
 class FrontendComparisonConfig:
@@ -79,10 +91,25 @@ class PolarityComparisonConfig(FrontendComparisonConfig):
     """Matched contrast-polarity geometry ablation."""
 
 
+@dataclass(frozen=True)
+class PredictiveSurpriseComparisonConfig(PredictiveRepresentationConfig):
+    """Stable-backbone masked-prediction recruitment experiment."""
+
+    drift_transformations: tuple[TransformationName, ...] = (
+        "inversion",
+        "low_contrast",
+        "gaussian_noise",
+        "center_occlusion",
+        "translation",
+        "striped_background",
+    )
+
+
 ComparisonConfig = (
     FrontendComparisonConfig
     | PredictiveRepresentationConfig
     | PolarityComparisonConfig
+    | PredictiveSurpriseComparisonConfig
 )
 
 
@@ -645,4 +672,165 @@ def run_predictive_representation_comparison(
         }
         for protocol in config.protocols
     }
+    return result
+
+
+def run_predictive_surprise_comparison(
+    config: PredictiveSurpriseComparisonConfig = (
+        PredictiveSurpriseComparisonConfig()
+    ),
+) -> dict[str, Any]:
+    """Test whether masked prediction improves bounded recruitment decisions."""
+
+    quality_config = replace(config, include_drift=False)
+    result = _run_matched_comparison(
+        quality_config,
+        kinds=PREDICTIVE_SURPRISE_KINDS,
+        baseline="managed16_signed_magnitude_conv",
+        experiment="stable_backbone_predictive_surprise_recruitment",
+        paired_summary_name="paired_difference_from_signed_magnitude",
+        paired_drift_summary_name=(
+            "paired_drift_difference_from_signed_magnitude"
+        ),
+    )
+    result["config"] = asdict(config)
+    predictive_kinds: tuple[DigitsKind, ...] = (
+        "managed16_predictor_control",
+        "managed16_predictive_surprise",
+        "managed16_lagged_surprise",
+    )
+    predictive_runs = [
+        run["quality"][protocol][kind]
+        for run in result["runs"]
+        for protocol in config.protocols
+        for kind in predictive_kinds
+    ]
+    result["invariants"].update(
+        {
+            "classifier_visible_basis_stable": all(
+                run["predictive_diagnostics"][
+                    "classifier_visible_basis_stable"
+                ]
+                for run in predictive_runs
+            ),
+            "predictor_forgetting_factor": 1.0,
+            "predictor_uses_backpropagation": False,
+            "four_predictor_updates_per_training_image": all(
+                run["predictive_diagnostics"]["predictor_updates"]
+                == 4 * run["trained_samples"]
+                for run in predictive_runs
+            ),
+            "every_training_image_updates_predictor": all(
+                run["predictive_diagnostics"]["predictor_images"]
+                == run["trained_samples"]
+                for run in predictive_runs
+            ),
+            "surprise_never_changes_classifier_features": True,
+            "surprise_has_no_absolute_threshold": True,
+            "lagged_control_stores_only_one_surprise_scalar": True,
+            "predictor_stored_raw_samples": 0,
+        }
+    )
+    result["summary"]["predictive_learning"] = {
+        protocol: {
+            kind: {
+                "initial_target_prediction_mse": _summary(
+                    [
+                        float(
+                            run["quality"][protocol][kind][
+                                "evaluation_history"
+                            ][0]["representation_diagnostics"][
+                                "target_prediction_mse"
+                            ]
+                        )
+                        for run in result["runs"]
+                    ]
+                ),
+                "final_target_prediction_mse": _summary(
+                    [
+                        float(
+                            run["quality"][protocol][kind][
+                                "representation_diagnostics"
+                            ]["target_prediction_mse"]
+                        )
+                        for run in result["runs"]
+                    ]
+                ),
+            }
+            for kind in predictive_kinds
+        }
+        for protocol in config.protocols
+    }
+    recruitment_metrics = (
+        "active_neurons",
+        "candidates_created",
+        "candidates_promoted",
+        "candidate_pool_rejections",
+        "resolved_candidate_reclaims",
+        "novelty_candidate_replacements",
+    )
+    result["summary"]["recruitment"] = {
+        protocol: {
+            kind: {
+                metric: _summary(
+                    [
+                        float(
+                            run["quality"][protocol][kind][
+                                "maturity_diagnostics"
+                            ][metric]
+                        )
+                        for run in result["runs"]
+                    ]
+                )
+                for metric in recruitment_metrics
+            }
+            for kind in PREDICTIVE_SURPRISE_KINDS
+        }
+        for protocol in config.protocols
+    }
+    surprise_metrics = (
+        "surprise_candidate_assignments",
+        "surprise_candidate_replacements",
+        "surprise_candidate_rejections",
+        "mean_pending_structural_surprise",
+    )
+    result["summary"]["surprise_recruitment"] = {
+        protocol: {
+            kind: {
+                metric: _summary(
+                    [
+                        float(
+                            run["quality"][protocol][kind][
+                                "maturity_diagnostics"
+                            ][metric]
+                        )
+                        for run in result["runs"]
+                    ]
+                )
+                for metric in surprise_metrics
+            }
+            for kind in (
+                "managed16_predictive_surprise",
+                "managed16_lagged_surprise",
+            )
+        }
+        for protocol in config.protocols
+    }
+    if config.include_drift:
+        result["drift_suite"] = run_drift_suite(
+            DriftSuiteConfig(
+                seeds=config.seeds,
+                test_per_class=config.test_per_class,
+                transformations=config.drift_transformations,
+                kinds=PREDICTIVE_SURPRISE_KINDS,
+                feature_width=config.feature_width,
+                cumulative_regularization=config.cumulative_regularization,
+                maturity_max_neurons=config.maturity_max_neurons,
+                maturity_rbf_width=config.maturity_rbf_width,
+                maturity_min_center_distance=(
+                    config.maturity_min_center_distance
+                ),
+                predictor_regularization=config.predictor_regularization,
+            )
+        )
     return result

@@ -61,6 +61,11 @@ def test_polarity_convolutions_preserve_width_and_expected_channels() -> None:
         signed_magnitude_features[32:],
         np.abs(signed_magnitude_features[:32]),
     )
+    assert signed_magnitude.feature_map(image).shape == (4, 4, 4)
+    np.testing.assert_array_equal(
+        signed_magnitude.feature_map(image).reshape(-1),
+        signed_magnitude_features,
+    )
 
 
 @pytest.mark.parametrize(

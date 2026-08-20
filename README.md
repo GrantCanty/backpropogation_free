@@ -32,6 +32,7 @@ The experimental contract and milestone plan are in [PLAN.md](PLAN.md).
   scaling benchmarks
 - Matched recurrent, raw-pixel, and fixed-convolution image frontends
 - Forward-only masked spatial prediction with cumulative, unit-weight RLS
+- Stable signed-magnitude classification with predictive-surprise recruitment
 - Matched absolute and signed-magnitude convolution polarity ablations
 - Six-shift recurring-domain suite with shared original training branches
 
@@ -54,6 +55,8 @@ PYTHONPATH=src python3 -m no_backprop frontends \
   --output results/frontend-comparison.json
 PYTHONPATH=src python3 -m no_backprop predictive \
   --output results/predictive-comparison.json
+PYTHONPATH=src python3 -m no_backprop predictive-surprise \
+  --output results/predictive-surprise.json
 PYTHONPATH=src python3 -m no_backprop polarity \
   --output results/polarity-comparison.json
 PYTHONPATH=src python3 -m no_backprop drift-suite \
@@ -131,6 +134,18 @@ original/inverted/original data, final inverted accuracy improves from 10.58%
 to 17.73%, still far below the recurrent control's 75.98%. This first version
 is retained as a diagnostic control: the next predictive design must keep the
 coordinates consumed by cumulative classifier statistics stable.
+
+The predictive-surprise command applies that constraint directly. The
+classifier always consumes the fixed 64-coordinate signed-magnitude basis;
+a separate cumulative masked predictor supplies only a pre-update relative
+surprise score for managing the bounded probationary candidate bank. It compares
+aligned surprise with both a trained-but-unused predictor and a one-image-lagged
+signal. Across ten paired seeds, the aligned signal changes candidate selection
+but produces no meaningful ordinary-stream gain and reduces mean final
+transformed drift accuracy by 0.48 points. It also adds about 43% state and
+roughly halves NumPy CPU throughput. This rules out scalar prediction error as
+a useful candidate-ranking signal in its current form while preserving the
+stable-backbone design for stronger local predictive signals.
 
 The polarity command tests why the recurrent control retained inverted digits
 so much better than the original convolution. Absolute convolution keeps four

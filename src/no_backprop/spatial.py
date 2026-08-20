@@ -168,10 +168,15 @@ class PolarityConvolutionImageEncoder:
         return self.base.kernels
 
     def encode(self, image: FloatArray) -> FloatArray:
-        signed = self.base.encode(image)
+        return self.feature_map(image).reshape(-1)
+
+    def feature_map(self, image: FloatArray) -> FloatArray:
+        """Return polarity channels as a channel-first pooled map."""
+
+        signed = self.base.feature_map(image)
         if self.mode == "absolute":
             return np.abs(signed)
-        return np.concatenate((signed, np.abs(signed)))
+        return np.concatenate((signed, np.abs(signed)), axis=0)
 
 
 @dataclass(frozen=True)

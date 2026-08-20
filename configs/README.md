@@ -9,6 +9,8 @@ the lazy 8x8/28x28 systems benchmark is in `scaling.json`.
 The paired recurrent/pixel/fixed-convolution frontend study is in
 `frontends.json`.
 The forward-only masked latent-prediction study is in `predictive.json`.
+The stable-backbone predictive-surprise recruitment study and its aligned,
+lagged, and unused-predictor controls are in `predictive_surprise.json`.
 The fixed contrast-polarity geometry ablation is in `polarity.json`.
 The recurring multi-transformation benchmark is in `drift_suite.json`; it uses
 signed-magnitude convolution as its primary spatial baseline.

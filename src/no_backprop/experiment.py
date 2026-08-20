@@ -22,7 +22,9 @@ from no_backprop.digits import (
 from no_backprop.metrics import PrequentialMetrics
 from no_backprop.predictive import (
     OnlinePredictiveSpatialClassifier,
+    OnlinePredictiveSurpriseSpatialClassifier,
     PredictiveSpatialConfig,
+    PredictiveSurpriseConfig,
 )
 from no_backprop.readouts import (
     BlockRLSReadout,
@@ -40,6 +42,7 @@ from no_backprop.readouts import (
     PrototypeReadout,
     ResponsibleProbationaryMaturityReadout,
     RLSReadout,
+    SurpriseManagedProbationaryMaturityReadout,
 )
 from no_backprop.reservoir import OnlineReservoir, ReservoirConfig
 from no_backprop.spatial import OnlineSpatialClassifier, SpatialClassifierConfig
@@ -464,6 +467,9 @@ DigitsKind = Literal[
     "managed16_absolute_conv",
     "managed16_signed_magnitude_conv",
     "managed16_predictive_conv",
+    "managed16_predictor_control",
+    "managed16_predictive_surprise",
+    "managed16_lagged_surprise",
 ]
 
 
@@ -471,7 +477,14 @@ DigitsLearner = (
     OnlineReservoir
     | OnlineSpatialClassifier
     | OnlinePredictiveSpatialClassifier
+    | OnlinePredictiveSurpriseSpatialClassifier
 )
+
+PREDICTIVE_LEARNER_TYPES = (
+    OnlinePredictiveSpatialClassifier,
+    OnlinePredictiveSurpriseSpatialClassifier,
+)
+FULL_IMAGE_LEARNER_TYPES = (OnlineSpatialClassifier,) + PREDICTIVE_LEARNER_TYPES
 
 
 def build_digits_learner(
@@ -485,12 +498,23 @@ def build_digits_learner(
         "managed16_absolute_conv",
         "managed16_signed_magnitude_conv",
         "managed16_predictive_conv",
+        "managed16_predictor_control",
+        "managed16_predictive_surprise",
+        "managed16_lagged_surprise",
     ):
         if config.hidden_size != 64:
             raise ValueError(
                 "matched spatial frontends require hidden_size=64"
             )
-        readout = ManagedProbationaryMaturityReadout(
+        readout_type = (
+            SurpriseManagedProbationaryMaturityReadout
+            if kind in (
+                "managed16_predictive_surprise",
+                "managed16_lagged_surprise",
+            )
+            else ManagedProbationaryMaturityReadout
+        )
+        readout = readout_type(
             65,
             10,
             seed=config.seed,
@@ -506,6 +530,26 @@ def build_digits_learner(
                     image_size=8,
                     output_size=10,
                     predictor_regularization=config.predictor_regularization,
+                    seed=config.seed,
+                ),
+                readout,
+            )
+        if kind in (
+            "managed16_predictor_control",
+            "managed16_predictive_surprise",
+            "managed16_lagged_surprise",
+        ):
+            mode = {
+                "managed16_predictor_control": "control",
+                "managed16_predictive_surprise": "aligned",
+                "managed16_lagged_surprise": "lagged",
+            }[kind]
+            return OnlinePredictiveSurpriseSpatialClassifier(
+                PredictiveSurpriseConfig(
+                    image_size=8,
+                    output_size=10,
+                    predictor_regularization=config.predictor_regularization,
+                    surprise_mode=mode,
                     seed=config.seed,
                 ),
                 readout,
@@ -724,9 +768,7 @@ def _process_digit_image(
 
     learner.reset_state()
     no_feedback = np.full(10, np.nan, dtype=np.float64)
-    if isinstance(
-        learner, (OnlineSpatialClassifier, OnlinePredictiveSpatialClassifier)
-    ):
+    if isinstance(learner, FULL_IMAGE_LEARNER_TYPES):
         prediction = learner.predict(image)
         learner.learn(target if target is not None else no_feedback)
         return prediction
@@ -765,7 +807,7 @@ def _learner_training_arrays(learner: DigitsLearner) -> tuple[np.ndarray, ...]:
     """Return all arrays that evaluation must never modify."""
 
     arrays = [learner.input_weights, learner.recurrent_weights, learner.bias]
-    if isinstance(learner, OnlinePredictiveSpatialClassifier):
+    if isinstance(learner, PREDICTIVE_LEARNER_TYPES):
         arrays.extend(
             [
                 learner.predictor.weights,
@@ -775,6 +817,14 @@ def _learner_training_arrays(learner: DigitsLearner) -> tuple[np.ndarray, ...]:
                 learner.predictor_squared_error_sum,
             ]
         )
+        if isinstance(learner, OnlinePredictiveSurpriseSpatialClassifier):
+            arrays.extend(
+                [
+                    learner.lagged_normalized_surprise,
+                    learner.applied_surprise_sum,
+                    learner.applied_surprise_count,
+                ]
+            )
     if isinstance(learner.readout, CumulativeMaturityReadout):
         arrays.extend(
             [
@@ -831,6 +881,17 @@ def _learner_training_arrays(learner: DigitsLearner) -> tuple[np.ndarray, ...]:
                     learner.readout.candidate_novelty,
                     learner.readout.resolved_candidate_reclaims,
                     learner.readout.novelty_candidate_replacements,
+                ]
+            )
+        if isinstance(
+            learner.readout, SurpriseManagedProbationaryMaturityReadout
+        ):
+            arrays.extend(
+                [
+                    learner.readout.candidate_structural_surprise,
+                    learner.readout.surprise_candidate_assignments,
+                    learner.readout.surprise_candidate_replacements,
+                    learner.readout.surprise_candidate_rejections,
                 ]
             )
         if isinstance(learner.readout, FastSlowValueProbationaryReadout):
@@ -898,10 +959,7 @@ def _evaluate_digits_locked(
     transient_before = [array.copy() for array in transient_arrays]
     try:
         result = _evaluate_digits(learner, images, labels)
-        if isinstance(
-            learner,
-            (OnlineSpatialClassifier, OnlinePredictiveSpatialClassifier),
-        ):
+        if isinstance(learner, FULL_IMAGE_LEARNER_TYPES):
             result["representation_diagnostics"] = (
                 learner.representation_diagnostics(images)
             )
@@ -1071,20 +1129,15 @@ def run_digits_model(
         result["memory_diagnostics"] = learner.readout.diagnostics
     if isinstance(learner.readout, CumulativeMaturityReadout):
         result["maturity_diagnostics"] = learner.readout.diagnostics
-    if isinstance(learner, OnlinePredictiveSpatialClassifier):
+    if isinstance(learner, PREDICTIVE_LEARNER_TYPES):
         result["predictive_diagnostics"] = learner.diagnostics
-    if isinstance(
-        learner, (OnlineSpatialClassifier, OnlinePredictiveSpatialClassifier)
-    ):
+    if isinstance(learner, FULL_IMAGE_LEARNER_TYPES):
         result["representation_diagnostics"] = final_evaluation[
             "representation_diagnostics"
         ]
     result["frontend_diagnostics"] = (
         learner.diagnostics
-        if isinstance(
-            learner,
-            (OnlineSpatialClassifier, OnlinePredictiveSpatialClassifier),
-        )
+        if isinstance(learner, FULL_IMAGE_LEARNER_TYPES)
         else {
             "frontend": "row_reservoir",
             "recurrent": True,

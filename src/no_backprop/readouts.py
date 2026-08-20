@@ -1195,6 +1195,137 @@ class ManagedProbationaryMaturityReadout(ProbationaryMaturityReadout):
 
 
 @dataclass
+class SurpriseManagedProbationaryMaturityReadout(
+    ManagedProbationaryMaturityReadout
+):
+    """Managed probation that preserves the most surprising candidates.
+
+    Structural surprise is supplied by an external forward-only predictor.
+    It never changes an active feature or prediction directly. When the bounded
+    candidate bank is full, unresolved candidates compete lexicographically by
+    structural surprise and then low RLS leverage, requiring no absolute gate.
+    """
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        self.candidate_structural_surprise = np.zeros(
+            self.candidate_capacity, dtype=np.float64
+        )
+        self.surprise_candidate_assignments = np.zeros(1, dtype=np.float64)
+        self.surprise_candidate_replacements = np.zeros(1, dtype=np.float64)
+        self.surprise_candidate_rejections = np.zeros(1, dtype=np.float64)
+        self._current_structural_surprise = 0.0
+
+    def set_structural_surprise(self, surprise: float) -> None:
+        if not np.isfinite(surprise) or surprise < 0.0:
+            raise ValueError("structural surprise must be finite and nonnegative")
+        self._current_structural_surprise = float(surprise)
+
+    def _clear_candidate(self, index: int) -> None:
+        super()._clear_candidate(index)
+        self.candidate_structural_surprise[index] = 0.0
+
+    def _managed_candidate_slot(self) -> int | None:
+        available = self._empty_candidate_slot()
+        if available is not None:
+            return available
+        active = np.flatnonzero(self.candidate_active > 0.0)
+        resolved: list[tuple[float, int]] = []
+        for index in active:
+            prediction = self._candidate_prediction(int(index))
+            label = int(self.candidate_labels[index])
+            if int(np.argmax(prediction)) == label:
+                sorted_scores = np.sort(prediction)
+                margin = (
+                    abs(float(sorted_scores[-1]))
+                    if len(sorted_scores) == 1
+                    else float(sorted_scores[-1] - sorted_scores[-2])
+                )
+                resolved.append((margin, int(index)))
+        if resolved:
+            index = max(resolved)[1]
+            self._clear_candidate(index)
+            self.resolved_candidate_reclaims[0] += 1.0
+            return index
+        if len(active) == 0:
+            return None
+
+        def priority(index: int) -> tuple[float, float]:
+            return (
+                float(self.candidate_structural_surprise[index]),
+                -float(self.candidate_novelty[index]),
+            )
+
+        index = min((int(value) for value in active), key=priority)
+        current_priority = (
+            self._current_structural_surprise,
+            -self._last_normalized_leverage,
+        )
+        if current_priority <= priority(index):
+            self.surprise_candidate_rejections[0] += 1.0
+            return None
+        self._clear_candidate(index)
+        self.surprise_candidate_replacements[0] += 1.0
+        return index
+
+    def _recruit(self, features: FloatArray, target_class: int) -> bool:
+        candidate_index = self._managed_candidate_slot()
+        if candidate_index is None:
+            self.candidate_pool_rejections[0] += 1.0
+            return False
+        self.candidate_centers[candidate_index] = features
+        self.candidate_counts[candidate_index] = 1.0
+        self.candidate_labels[candidate_index] = float(target_class)
+        self.candidate_active[candidate_index] = 1.0
+        self.candidate_novelty[candidate_index] = self._last_normalized_leverage
+        self.candidate_structural_surprise[candidate_index] = (
+            self._current_structural_surprise
+        )
+        self.candidates_created[0] += 1.0
+        self.surprise_candidate_assignments[0] += 1.0
+        return False
+
+    @property
+    def diagnostics(self) -> dict[str, float | int | bool]:
+        result = super().diagnostics
+        active = self.candidate_active > 0.0
+        result.update(
+            {
+                "structural_surprise_managed": True,
+                "surprise_candidate_assignments": int(
+                    self.surprise_candidate_assignments[0]
+                ),
+                "surprise_candidate_replacements": int(
+                    self.surprise_candidate_replacements[0]
+                ),
+                "surprise_candidate_rejections": int(
+                    self.surprise_candidate_rejections[0]
+                ),
+                "mean_pending_structural_surprise": (
+                    0.0
+                    if not np.any(active)
+                    else float(
+                        np.mean(self.candidate_structural_surprise[active])
+                    )
+                ),
+            }
+        )
+        return result
+
+    @property
+    def state_nbytes(self) -> int:
+        return super().state_nbytes + sum(
+            array.nbytes
+            for array in (
+                self.candidate_structural_surprise,
+                self.surprise_candidate_assignments,
+                self.surprise_candidate_replacements,
+                self.surprise_candidate_rejections,
+            )
+        )
+
+
+@dataclass
 class FastSlowValueProbationaryReadout(ManagedProbationaryMaturityReadout):
     """Managed frozen keys with residual fast values and exact consolidation.
 

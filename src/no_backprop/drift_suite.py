@@ -51,11 +51,13 @@ class DriftSuiteConfig:
         "translation",
         "striped_background",
     )
+    kinds: tuple[DigitsKind, ...] = DRIFT_SUITE_KINDS
     feature_width: int = 64
     cumulative_regularization: float = 1.0
     maturity_max_neurons: int = 32
     maturity_rbf_width: float = 0.05
     maturity_min_center_distance: float = 0.01
+    predictor_regularization: float = 1.0
     contrast_scale: float = 0.55
     noise_std: float = 0.16
     occlusion_size: int = 2
@@ -69,11 +71,21 @@ class DriftSuiteConfig:
             raise ValueError("transformations cannot be empty")
         if len(set(self.transformations)) != len(self.transformations):
             raise ValueError("transformations must be unique")
+        if (
+            not self.kinds
+            or len(set(self.kinds)) != len(self.kinds)
+            or PRIMARY_SPATIAL_BASELINE not in self.kinds
+        ):
+            raise ValueError(
+                "kinds must be unique and include the signed-magnitude baseline"
+            )
         allowed = set(TransformationName.__args__)
         if any(name not in allowed for name in self.transformations):
             raise ValueError("unknown drift transformation")
         if self.feature_width != 64:
             raise ValueError("the matched drift suite requires 64 features")
+        if self.predictor_regularization <= 0.0:
+            raise ValueError("predictor_regularization must be positive")
         if not 0.0 < self.contrast_scale < 1.0:
             raise ValueError("contrast_scale must be in (0, 1)")
         if self.noise_std <= 0.0:
@@ -155,6 +167,7 @@ def _digits_config(config: DriftSuiteConfig, seed: int) -> DigitsExperimentConfi
         maturity_max_neurons=config.maturity_max_neurons,
         maturity_rbf_width=config.maturity_rbf_width,
         maturity_min_center_distance=config.maturity_min_center_distance,
+        predictor_regularization=config.predictor_regularization,
     )
 
 
@@ -357,7 +370,7 @@ def run_drift_suite(
                 transformed,
                 seed=seed,
             )
-            for kind in DRIFT_SUITE_KINDS
+            for kind in config.kinds
         }
         runs.append({"seed": seed, "models": models})
 
@@ -374,7 +387,7 @@ def run_drift_suite(
                 )
                 for metric in DRIFT_METRICS
             }
-            for kind in DRIFT_SUITE_KINDS
+            for kind in config.kinds
         }
         for name in config.transformations
     }
@@ -396,7 +409,7 @@ def run_drift_suite(
                 )
                 for metric in DRIFT_METRICS
             }
-            for kind in DRIFT_SUITE_KINDS
+            for kind in config.kinds
             if kind != PRIMARY_SPATIAL_BASELINE
         }
         for name in config.transformations
@@ -404,7 +417,7 @@ def run_drift_suite(
     aggregate_runs = [
         {
             kind: _aggregate_model(run["models"][kind])
-            for kind in DRIFT_SUITE_KINDS
+            for kind in config.kinds
         }
         for run in runs
     ]
@@ -418,7 +431,7 @@ def run_drift_suite(
             )
             for metric in aggregate_metrics
         }
-        for kind in DRIFT_SUITE_KINDS
+        for kind in config.kinds
     }
     aggregate_paired = {
         kind: {
@@ -431,7 +444,7 @@ def run_drift_suite(
             )
             for metric in aggregate_metrics
         }
-        for kind in DRIFT_SUITE_KINDS
+        for kind in config.kinds
         if kind != PRIMARY_SPATIAL_BASELINE
     }
     training_samples = len(original.train_labels)
@@ -453,7 +466,9 @@ def run_drift_suite(
             "labels_preserved_by_transformations": label_preserving,
         },
         "baseline": PRIMARY_SPATIAL_BASELINE,
-        "controls": list(DRIFT_SUITE_KINDS[1:]),
+        "controls": [
+            kind for kind in config.kinds if kind != PRIMARY_SPATIAL_BASELINE
+        ],
         "invariants": {
             "same_downstream_memory": all(
                 model["downstream_memory"]

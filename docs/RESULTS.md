@@ -954,6 +954,60 @@ target for the next learned representation. The suite still covers
 label-preserving covariate shifts, not changing label semantics or real-world
 open-ended drift.
 
+### Stable-backbone predictive-surprise recruitment
+
+This experiment removes the first predictive model's moving-coordinate
+confound. Classification always uses the fixed 64-coordinate signed-magnitude
+map. In parallel, a cumulative RLS predictor masks and predicts each 2x2x4
+quadrant. Its pre-update image MSE, divided by cumulative historical predictor
+MSE, is used only to rank unresolved probationary candidates when the bounded
+16-slot bank is full. It cannot change active coordinates, logits, or the
+single label update. There is no forgetting factor below 1, raw-example replay,
+backpropagation, or absolute surprise threshold.
+
+Four matched variants use ten paired seeds: the original signed-magnitude
+baseline, a predictor that is trained but unused, aligned current-image
+surprise, and a one-image-lagged surprise control. The unused predictor is
+bit-for-bit equivalent in every reported accuracy metric, isolating the cost of
+prediction from the effect of its routing signal.
+
+| Stream | Metric | Baseline | Aligned surprise | Paired change |
+|---|---|---:|---:|---:|
+| Shuffled | Online | 91.65% | 91.65% | +0.00 points |
+| Shuffled | Final | 94.68% | 94.68% | +0.00 points |
+| Augmented | Online | 73.18% | 73.13% | -0.05 points |
+| Augmented | Final | 92.40% | 92.30% | -0.10 points |
+| Class ordered | Online | 84.25% | 84.26% | +0.01 points |
+| Class ordered | Final | 94.58% | 94.68% | +0.10 points |
+
+The predictor itself learns: held-out masked-target MSE falls from 0.1351 to
+0.0304 on shuffled and ordered streams and to 0.0346 with augmentation. The
+signal also materially changes bounded memory management. For example, aligned
+surprise averages 113.3 candidate replacements and 440.9 rejections on the
+augmented stream. Therefore the near-zero classification result is not caused
+by a disconnected signal.
+
+| Drift aggregate | Baseline | Aligned surprise | Paired change (mean ± seed SD) |
+|---|---:|---:|---:|
+| Final original | 93.68% | 93.58% | -0.10 ± 0.20 points |
+| Final transformed | 89.40% | 88.93% | -0.48 ± 0.25 points |
+| Final joint | 91.54% | 91.25% | -0.29 ± 0.14 points |
+| Worst transformed | 77.93% | 77.03% | -0.90 ± 1.28 points |
+
+Aligned surprise improves only Gaussian-noise final transformed accuracy
+(+0.10 ± 0.39 points) and is neutral-to-negative on the other five shifts,
+including -0.63 ± 1.00 points on translation. The lagged control is closer to
+baseline than aligned surprise on aggregate final transformed accuracy
+(-0.14 ± 0.27 points), which is evidence against the current scalar structural
+prediction error being a useful recruitment objective.
+
+The mechanism costs 156.9 KB versus 109.8 KB for baseline and processes roughly
+2.3--2.5 thousand rather than 4.4--5.2 thousand training images/second on this
+CPU. The stable-anchor architecture passes its engineering contract, but this
+specific global surprise ranking does not pass the quality/cost gate. A next
+attempt should test spatially local residual structure or frozen predictive
+coordinates, rather than tune this scalar ranking post hoc.
+
 ## Limitations and next decision
 
 - All tasks are synthetic and small.
@@ -976,6 +1030,9 @@ open-ended drift.
   output basis is incompatible with the current cumulative downstream
   statistics. A successful predictive objective is not by itself a stable
   continual representation.
+- Stable-backbone predictive surprise avoids coordinate drift, but a single
+  normalized image-level prediction error changes candidate allocation without
+  improving ordinary accuracy and slightly worsens aggregate drift retention.
 - The predictive probe retains a fixed target encoder. A learned target
   encoder is deliberately deferred until downstream coordinate stability is
   addressed.

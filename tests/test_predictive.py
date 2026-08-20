@@ -12,9 +12,15 @@ from no_backprop.experiment import (
 )
 from no_backprop.frontend_comparison import (
     PredictiveRepresentationConfig,
+    PredictiveSurpriseComparisonConfig,
     run_predictive_representation_comparison,
+    run_predictive_surprise_comparison,
 )
-from no_backprop.predictive import OnlinePredictiveSpatialClassifier
+from no_backprop.predictive import (
+    OnlinePredictiveSpatialClassifier,
+    OnlinePredictiveSurpriseSpatialClassifier,
+)
+from no_backprop.readouts import SurpriseManagedProbationaryMaturityReadout
 
 
 def test_predictive_context_masks_each_target_quadrant() -> None:
@@ -180,3 +186,118 @@ def test_predictive_comparison_reports_factor_free_contract() -> None:
         learning["final_target_prediction_mse"]["mean"]
         < learning["initial_target_prediction_mse"]["mean"]
     )
+
+
+def test_predictive_surprise_keeps_classifier_on_stable_features() -> None:
+    learner = build_digits_learner(
+        "managed16_predictive_surprise",
+        DigitsExperimentConfig(hidden_size=64, seed=23),
+    )
+    assert isinstance(learner, OnlinePredictiveSurpriseSpatialClassifier)
+    image = np.arange(64, dtype=np.float64).reshape(8, 8) / 63.0
+    feature_map = learner.encoder.feature_map(image)
+    predictor_before = learner.predictor.weights.copy()
+
+    learner.predict(image)
+    np.testing.assert_array_equal(
+        learner._pending_features[:-1], feature_map.reshape(-1)
+    )
+    np.testing.assert_array_equal(learner.predictor.weights, predictor_before)
+    assert learner._pending_contexts.shape == (4, 69)
+    assert learner._pending_targets.shape == (4, 16)
+    learner.learn(_digit_target(4))
+
+    assert learner.diagnostics["classifier_visible_basis_stable"]
+    assert learner.diagnostics["predictor_updates"] == 4
+    assert learner.diagnostics["mean_applied_relative_surprise"] == 1.0
+
+
+def test_surprise_candidate_bank_preserves_higher_surprise() -> None:
+    learner = build_digits_learner(
+        "managed16_predictive_surprise",
+        DigitsExperimentConfig(hidden_size=64, seed=29),
+    )
+    readout = learner.readout
+    assert isinstance(readout, SurpriseManagedProbationaryMaturityReadout)
+    readout.candidate_active.fill(1.0)
+    readout.candidate_labels.fill(1.0)
+    readout.candidate_structural_surprise[:] = np.linspace(1.0, 2.0, 16)
+    readout.candidate_novelty.fill(0.5)
+
+    readout.set_structural_surprise(0.5)
+    assert readout._managed_candidate_slot() is None
+    assert readout.diagnostics["surprise_candidate_rejections"] == 1
+
+    readout.set_structural_surprise(3.0)
+    assert readout._managed_candidate_slot() == 0
+    assert readout.diagnostics["surprise_candidate_replacements"] == 1
+    assert readout.candidate_active[0] == 0.0
+
+
+def test_aligned_and_lagged_surprise_apply_different_causal_signals() -> None:
+    config = DigitsExperimentConfig(hidden_size=64, seed=31)
+    aligned = build_digits_learner("managed16_predictive_surprise", config)
+    lagged = build_digits_learner("managed16_lagged_surprise", config)
+    first = np.zeros((8, 8), dtype=np.float64)
+    second = np.eye(8, dtype=np.float64)
+    for learner in (aligned, lagged):
+        _process_digit_image(learner, first, target=_digit_target(0))
+        _process_digit_image(learner, second, target=_digit_target(1))
+
+    assert aligned.diagnostics["surprise_mode"] == "aligned"
+    assert lagged.diagnostics["surprise_mode"] == "lagged"
+    assert (
+        aligned.diagnostics["mean_applied_relative_surprise"]
+        != lagged.diagnostics["mean_applied_relative_surprise"]
+    )
+
+
+def test_predictive_surprise_checkpoint_round_trip(tmp_path) -> None:
+    config = DigitsExperimentConfig(hidden_size=64, seed=37)
+    learner = build_digits_learner("managed16_predictive_surprise", config)
+    rng = np.random.default_rng(37)
+    for label in (2, 7, 2, 5, 9):
+        _process_digit_image(
+            learner, rng.uniform(size=(8, 8)), target=_digit_target(label)
+        )
+    path = save_checkpoint(learner, tmp_path / "predictive_surprise.npz")
+    evaluation_image = rng.uniform(size=(8, 8))
+    expected = _process_digit_image(learner, evaluation_image, target=None)
+
+    restored = build_digits_learner("managed16_predictive_surprise", config)
+    restore_checkpoint(restored, path)
+    actual = _process_digit_image(restored, evaluation_image, target=None)
+    np.testing.assert_allclose(actual, expected)
+    assert restored.diagnostics == learner.diagnostics
+    assert restored.readout.diagnostics == learner.readout.diagnostics
+    np.testing.assert_array_equal(
+        restored.readout.candidate_structural_surprise,
+        learner.readout.candidate_structural_surprise,
+    )
+
+
+def test_predictive_surprise_comparison_reports_matched_controls() -> None:
+    result = run_predictive_surprise_comparison(
+        PredictiveSurpriseComparisonConfig(
+            seeds=(41,),
+            test_per_class=2,
+            protocols=("shuffled",),
+            include_drift=False,
+        )
+    )
+    invariants = result["invariants"]
+    assert invariants["classifier_visible_basis_stable"]
+    assert invariants["four_predictor_updates_per_training_image"]
+    assert invariants["surprise_never_changes_classifier_features"]
+    assert invariants["lagged_control_stores_only_one_surprise_scalar"]
+    assert set(result["summary"]["quality"]["shuffled"]) == {
+        "managed16_signed_magnitude_conv",
+        "managed16_predictor_control",
+        "managed16_predictive_surprise",
+        "managed16_lagged_surprise",
+    }
+    assert set(result["summary"]["predictive_learning"]["shuffled"]) == {
+        "managed16_predictor_control",
+        "managed16_predictive_surprise",
+        "managed16_lagged_surprise",
+    }

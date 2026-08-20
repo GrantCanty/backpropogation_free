@@ -9,7 +9,10 @@ import numpy as np
 
 from no_backprop.eligibility import EligibilityReservoir
 from no_backprop.protocol import ProtocolError
-from no_backprop.predictive import OnlinePredictiveSpatialClassifier
+from no_backprop.predictive import (
+    OnlinePredictiveSpatialClassifier,
+    OnlinePredictiveSurpriseSpatialClassifier,
+)
 from no_backprop.readouts import (
     BlockRLSReadout,
     CumulativeMemoryReadout,
@@ -24,6 +27,7 @@ from no_backprop.readouts import (
     PrototypeReadout,
     ResponsibleProbationaryMaturityReadout,
     RLSReadout,
+    SurpriseManagedProbationaryMaturityReadout,
 )
 from no_backprop.reservoir import OnlineReservoir
 from no_backprop.spatial import OnlineSpatialClassifier
@@ -33,6 +37,12 @@ CheckpointLearner = (
     OnlineReservoir
     | OnlineSpatialClassifier
     | OnlinePredictiveSpatialClassifier
+    | OnlinePredictiveSurpriseSpatialClassifier
+)
+
+PREDICTIVE_CHECKPOINT_TYPES = (
+    OnlinePredictiveSpatialClassifier,
+    OnlinePredictiveSurpriseSpatialClassifier,
 )
 
 
@@ -55,7 +65,7 @@ def save_checkpoint(learner: CheckpointLearner, destination: str | Path) -> Path
         "bias": learner.bias,
         "state": learner.state,
     }
-    if isinstance(learner, OnlinePredictiveSpatialClassifier):
+    if isinstance(learner, PREDICTIVE_CHECKPOINT_TYPES):
         arrays.update(
             {
                 "predictor_weights": learner.predictor.weights,
@@ -69,6 +79,13 @@ def save_checkpoint(learner: CheckpointLearner, destination: str | Path) -> Path
                 ),
             }
         )
+        if isinstance(learner, OnlinePredictiveSurpriseSpatialClassifier):
+            for name in (
+                "lagged_normalized_surprise",
+                "applied_surprise_sum",
+                "applied_surprise_count",
+            ):
+                arrays[f"predictor_{name}"] = getattr(learner, name)
     if isinstance(learner.readout, CumulativeMaturityReadout):
         maturity_names = (
             "expanded_weights",
@@ -132,6 +149,18 @@ def save_checkpoint(learner: CheckpointLearner, destination: str | Path) -> Path
             arrays["readout_novelty_candidate_replacements"] = (
                 learner.readout.novelty_candidate_replacements
             )
+        if isinstance(
+            learner.readout, SurpriseManagedProbationaryMaturityReadout
+        ):
+            for name in (
+                "candidate_structural_surprise",
+                "surprise_candidate_assignments",
+                "surprise_candidate_replacements",
+                "surprise_candidate_rejections",
+            ):
+                arrays[f"readout_surprise_{name}"] = getattr(
+                    learner.readout, name
+                )
         if isinstance(learner.readout, FastSlowValueProbationaryReadout):
             fast_slow_names = (
                 "fast_values",
@@ -218,7 +247,7 @@ def restore_checkpoint(learner: CheckpointLearner, source: str | Path) -> None:
         )
         _copy_array(learner.bias, arrays["bias"], "bias")
         _copy_array(learner.state, arrays["state"], "state")
-        if isinstance(learner, OnlinePredictiveSpatialClassifier):
+        if isinstance(learner, PREDICTIVE_CHECKPOINT_TYPES):
             _copy_array(
                 learner.predictor.weights,
                 arrays["predictor_weights"],
@@ -235,6 +264,18 @@ def restore_checkpoint(learner: CheckpointLearner, source: str | Path) -> None:
                 "predictor_squared_error_sum",
             ):
                 _copy_array(getattr(learner, name), arrays[name], name)
+            if isinstance(learner, OnlinePredictiveSurpriseSpatialClassifier):
+                for name in (
+                    "lagged_normalized_surprise",
+                    "applied_surprise_sum",
+                    "applied_surprise_count",
+                ):
+                    checkpoint_name = f"predictor_{name}"
+                    _copy_array(
+                        getattr(learner, name),
+                        arrays[checkpoint_name],
+                        checkpoint_name,
+                    )
         if isinstance(learner.readout, CumulativeMaturityReadout):
             maturity_names = (
                 "expanded_weights",
@@ -317,6 +358,21 @@ def restore_checkpoint(learner: CheckpointLearner, source: str | Path) -> None:
                     arrays["readout_novelty_candidate_replacements"],
                     "readout_novelty_candidate_replacements",
                 )
+            if isinstance(
+                learner.readout, SurpriseManagedProbationaryMaturityReadout
+            ):
+                for name in (
+                    "candidate_structural_surprise",
+                    "surprise_candidate_assignments",
+                    "surprise_candidate_replacements",
+                    "surprise_candidate_rejections",
+                ):
+                    checkpoint_name = f"readout_surprise_{name}"
+                    _copy_array(
+                        getattr(learner.readout, name),
+                        arrays[checkpoint_name],
+                        checkpoint_name,
+                    )
             if isinstance(learner.readout, FastSlowValueProbationaryReadout):
                 fast_slow_names = (
                     "fast_values",
