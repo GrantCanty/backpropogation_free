@@ -10,6 +10,8 @@ The paired recurrent/pixel/fixed-convolution frontend study is in
 `frontends.json`.
 The forward-only masked latent-prediction study is in `predictive.json`.
 The fixed contrast-polarity geometry ablation is in `polarity.json`.
+The recurring multi-transformation benchmark is in `drift_suite.json`; it uses
+signed-magnitude convolution as its primary spatial baseline.
 The factor-free complementary-memory defaults are in
 `factor_free_memory.json`; it includes fixed-key ungated, entropy-gated, and
 RLS-leverage-gated controls, probationary frozen keys, and adaptive key-value

@@ -888,6 +888,72 @@ solves arbitrary context shifts or the predictive model's moving-basis problem;
 future drift tests must include transformations not removable by a hand-chosen
 symmetry.
 
+### Recurring transformation drift suite
+
+The broader suite promotes signed-magnitude convolution to the primary spatial
+baseline. It retains the recurrent reservoir as a sequential control, ordinary
+convolution as the sign-interference ablation, and absolute convolution as an
+invariance diagnostic. Six deterministic transformations preserve the supplied
+labels: inversion, contrast scaling toward 0.5, Gaussian noise with standard
+deviation 0.16, a centered 2x2 occlusion, a one-pixel down-right translation,
+and a 20% alternating-column background.
+
+For each seed and model, the original domain is trained exactly once. That
+post-training learner is copied into six branches, each of which follows
+`original -> transformed -> original`. Consequently, every transformation for
+a model begins with byte-identical learned statistics. All models expose 64
+coordinates to the same 32-mature/16-candidate Managed readout, receive one
+label update per image, retain no raw samples, and remain locked during every
+evaluation. Results use the same ten paired seeds as the frontend experiments.
+
+| Encoder | Mean original forgetting | Final original | Final transformed | Worst transformed | Final joint |
+|---|---:|---:|---:|---:|---:|
+| Signed-magnitude baseline | 2.32 points | 93.68% | 89.40% | 77.93% | 91.54% |
+| Recurrent reservoir | **1.63 points** | 90.39% | 85.13% | 75.63% | 87.76% |
+| Fixed convolution | 7.29 points | 93.34% | 78.25% | 10.75% | 85.80% |
+| Absolute convolution | 1.68 points | **93.80%** | **91.30%** | **85.00%** | **92.55%** |
+
+The table first averages each seed across transformations and then averages the
+ten seed-level values. Relative to recurrence, signed-magnitude gains 3.29 ±
+0.57 points final-original, 4.28 ± 0.95 final-transformed, and 3.78 ± 0.65
+final-joint accuracy. Recurrence reduces mean original forgetting by 0.69 ±
+0.44 points, but starts and finishes at lower accuracy. Relative to ordinary
+convolution, signed-magnitude gains 11.15 ± 0.86 transformed and 5.74 ± 0.69
+joint points; the inversion failure accounts for most of that difference.
+
+| Transformation | Signed-magnitude | Recurrent | Fixed conv | Absolute conv |
+|---|---:|---:|---:|---:|
+| Inversion | 78.28% | 75.63% | 10.75% | **88.88%** |
+| Low contrast | 95.03% | 88.00% | **96.33%** | 95.63% |
+| Gaussian noise | 90.33% | 86.23% | **90.98%** | 90.58% |
+| Center occlusion | 92.45% | 87.25% | **92.78%** | 92.50% |
+| Translation | **85.23%** | 83.83% | 83.45% | 85.03% |
+| Striped background | 95.13% | 89.85% | **95.25%** | 95.23% |
+
+These are final transformed-domain accuracies after the original domain
+returns. Signed-magnitude is 1.40 ± 1.18 points above recurrence on translation,
+and 4.10--7.03 points above it on noise, occlusion, low contrast, and stripes;
+all four latter intervals exclude zero. Its 2.65 ± 3.24 inversion advantage is
+inconclusive. Against fixed convolution, signed-magnitude clearly wins
+inversion and translation, while fixed convolution is 1.30 ± 0.77 points
+better under low contrast and is statistically tied on the remaining three.
+
+Absolute convolution averages 1.90 ± 0.97 transformed and 1.01 ± 0.62 joint
+points above signed-magnitude. The per-transformation comparison localizes that
+gain: absolute is 10.60 ± 2.92 points better on inversion, while every one of
+its other final-transformed differences from signed-magnitude includes zero.
+Thus its aggregate advantage is the expected reward for encoding the exact
+polarity symmetry, not evidence of a generally richer representation.
+
+The suite supports signed-magnitude as the main spatial baseline. It preserves
+the information destroyed by absolute responses, substantially exceeds
+recurrence across several unrelated appearance shifts, and avoids the fixed
+convolution's catastrophic inversion conflict. Translation remains the hardest
+non-polarity transformation at 85.23%, making spatial displacement a useful
+target for the next learned representation. The suite still covers
+label-preserving covariate shifts, not changing label semantics or real-world
+open-ended drift.
+
 ## Limitations and next decision
 
 - All tasks are synthetic and small.
@@ -896,10 +962,11 @@ symmetry.
 - Per-synapse eligibility scales quadratically in a dense recurrent layer.
 - There is no adversarial update protection or production safety layer.
 - Retention still declines when context zero returns.
-- Some image results are only three seeds on a small bundled dataset. The
-  leverage, responsibility, capacity, value, and frontend experiments use 10
-  seeds, but their intervals are not corrected for multiple comparisons, and
-  hyperparameters were not formally tuned.
+- Some earlier image results are only three seeds on a small bundled dataset.
+  The leverage, responsibility, capacity, value, frontend, predictive,
+  polarity, and drift-suite experiments use 10 seeds, but their intervals are
+  not corrected for multiple comparisons, and hyperparameters were not
+  formally tuned.
 - The augmentation doubles exposure; it has not yet been compared with simply
   repeating the original stream for the same number of updates.
 - Masking removes the target latent coordinates, but neighboring fixed
@@ -916,6 +983,10 @@ symmetry.
   reversal. Absolute convolution is intentionally tailored to that symmetry;
   its success must not be generalized to transformations that change semantic
   information.
+- The drift suite broadens label-preserving appearance changes but still does
+  not test changing label semantics, new classes, adversarial corruptions, or
+  transformations whose labels require human review. Occlusion and translation
+  can make some 8x8 digits intrinsically ambiguous.
 - RLS's strong retention uses quadratic state, so it is not yet a scalable
   answer to continual learning.
 - Blank-image scaling validates systems behavior, not accuracy or numerical
@@ -939,15 +1010,18 @@ symmetry.
 - Fast values increase immediate ordered plasticity but significantly worsen
   retention; evidence-doubling consolidation is algebraically lossless yet
   further destabilizes subsequent learning.
-- Fixed convolution improves ordinary, augmented, and ordered accuracy while
-  reducing state and CPU time, but fails to retain the inverted domain after
-  the original domain returns; recurrence remains the drift control.
+- Ordinary fixed convolution improves conventional accuracy and CPU time but
+  fails under inversion. Signed-magnitude is now the primary spatial baseline;
+  recurrence remains a sequential control and absolute convolution a
+  transformation-specific invariance diagnostic.
 - Adaptive keys introduce nonlinear basis drift, add 24% state and about 6%
   NumPy CPU time, and have only a small three-seed adaptation gain.
 - Past observations have no counterfactual activations for neurons recruited
   later; narrow locality currently protects those historical regions without
   replay, but does not provide a formal non-interference guarantee.
 
-The next mechanism experiment should keep the cumulative single-path invariant
-while scaling managed-16 capacity, feature width, and generated image streams.
-Learned or expanding encoders remain later work.
+The next mechanism experiment should retain the fixed signed-magnitude anchor
+while allowing predictive candidates to mature into frozen, append-only
+coordinates. This directly tests whether forward-only representation learning
+can improve translation and other residual shifts without invalidating older
+cumulative classifier statistics.

@@ -33,6 +33,7 @@ The experimental contract and milestone plan are in [PLAN.md](PLAN.md).
 - Matched recurrent, raw-pixel, and fixed-convolution image frontends
 - Forward-only masked spatial prediction with cumulative, unit-weight RLS
 - Matched absolute and signed-magnitude convolution polarity ablations
+- Six-shift recurring-domain suite with shared original training branches
 
 All current data is generated or bundled locally and handled deterministically.
 Running the MVP does not download a dataset.
@@ -55,6 +56,8 @@ PYTHONPATH=src python3 -m no_backprop predictive \
   --output results/predictive-comparison.json
 PYTHONPATH=src python3 -m no_backprop polarity \
   --output results/polarity-comparison.json
+PYTHONPATH=src python3 -m no_backprop drift-suite \
+  --output results/drift-suite.json
 PYTHONPATH=src python3 -m no_backprop replicate --output results/replication.json
 
 # Conventional comparison, kept outside the core package
@@ -142,6 +145,20 @@ final accuracy. This identifies contrast-sign interference—not cross-example
 recurrent state—as the cause of the earlier gap. It is a benchmark-specific
 invariance result, not evidence that fixed absolute features solve general
 concept drift.
+
+The drift-suite command makes signed-magnitude convolution the primary spatial
+baseline and tests original/transformed/original streams for inversion, low
+contrast, Gaussian noise, center occlusion, one-pixel translation, and striped
+backgrounds. Each model trains on the original domain once before its state is
+branched, so all six paired shifts start from identical learned statistics.
+Across ten seeds, signed-magnitude finishes with 89.40% mean transformed and
+93.68% mean original accuracy, versus 85.13% and 90.39% for recurrence. It also
+beats recurrence on mean joint accuracy by 3.78 ± 0.65 points. Absolute
+convolution reaches 91.30% transformed accuracy, but its clear advantage over
+signed-magnitude occurs only on the polarity-specific inversion. This supports
+signed-magnitude as the main no-backprop spatial baseline while retaining
+absolute convolution as a symmetry diagnostic and recurrence as a sequential
+control.
 
 The cumulative-memory command tests both factor-free branches. Every labeled
 observation updates cumulative statistics with unit weight, no raw image is
@@ -231,9 +248,10 @@ that local learning generally outperforms backpropagation. See
 ## Roadmap
 
 The `memory` branch now tests factor-free complementary, single-path maturity,
-adaptive key-value, and forward-only predictive representations. The first
-JEPA-inspired experiment is not an I-JEPA reimplementation: a cumulative local
-predictor learns masked fixed-convolution targets without automatic
+adaptive key-value, and forward-only predictive representations, with
+signed-magnitude convolution established as the primary spatial baseline. The
+first JEPA-inspired experiment is not an I-JEPA reimplementation: a cumulative
+local predictor learns masked fixed-convolution targets without automatic
 differentiation or a backward pass. It establishes that target prediction can
 be learned online, but also exposes representation-basis drift as the next
 mechanism problem. Future predictive coordinates should be frozen, appended,

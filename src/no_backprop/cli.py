@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 
+from no_backprop.drift_suite import DriftSuiteConfig, run_drift_suite
 from no_backprop.experiment import (
     ContinualExperimentConfig,
     DelayedExperimentConfig,
@@ -198,6 +199,38 @@ def build_parser() -> argparse.ArgumentParser:
     polarity.add_argument("--augmentation-copies", type=int, default=1)
     polarity.add_argument("--no-drift", action="store_true")
     polarity.add_argument("--output", type=str)
+    drift_suite = subparsers.add_parser(
+        "drift-suite",
+        help="run recurring label-preserving image transformations",
+    )
+    drift_suite.add_argument(
+        "--seeds",
+        type=int,
+        nargs="+",
+        default=[3, 7, 11, 17, 23, 29, 37, 41, 47, 53],
+    )
+    drift_suite.add_argument("--test-per-class", type=int, default=40)
+    drift_suite.add_argument(
+        "--transformations",
+        nargs="+",
+        choices=(
+            "inversion",
+            "low_contrast",
+            "gaussian_noise",
+            "center_occlusion",
+            "translation",
+            "striped_background",
+        ),
+        default=[
+            "inversion",
+            "low_contrast",
+            "gaussian_noise",
+            "center_occlusion",
+            "translation",
+            "striped_background",
+        ],
+    )
+    drift_suite.add_argument("--output", type=str)
     replicate = subparsers.add_parser(
         "replicate", help="run delayed and continual benchmarks across seeds"
     )
@@ -351,6 +384,17 @@ def main(argv: list[str] | None = None) -> int:
                 test_per_class=args.test_per_class,
                 augmentation_copies=args.augmentation_copies,
                 include_drift=not args.no_drift,
+            )
+        )
+        if args.output:
+            write_json_result(result, args.output)
+        print(json.dumps(result, indent=2, sort_keys=True))
+    elif args.command == "drift-suite":
+        result = run_drift_suite(
+            DriftSuiteConfig(
+                seeds=tuple(args.seeds),
+                test_per_class=args.test_per_class,
+                transformations=tuple(args.transformations),
             )
         )
         if args.output:
