@@ -29,6 +29,7 @@ from no_backprop.readouts import (
     FrozenReadout,
     KeyValueMaturityReadout,
     LMSReadout,
+    ManagedProbationaryMaturityReadout,
     ProbationaryMaturityReadout,
     ProtectedFastSlowReadout,
     PrototypeReadout,
@@ -444,6 +445,9 @@ DigitsKind = Literal[
     "probation_winner",
     "probation_top4_normalized",
     "probation_top2_normalized",
+    "probation_managed32",
+    "probation_managed16",
+    "probation_managed8",
     "key_value",
     "key_value_entropy",
 ]
@@ -555,6 +559,26 @@ def build_digits_learner(
             min_center_distance=config.maturity_min_center_distance,
             responsibility_k=responsibility_k,
             normalize_responsibility=kind.endswith("_normalized"),
+        )
+    elif kind in (
+        "probation_managed32",
+        "probation_managed16",
+        "probation_managed8",
+    ):
+        candidate_capacity = {
+            "probation_managed32": 32,
+            "probation_managed16": 16,
+            "probation_managed8": 8,
+        }[kind]
+        readout = ManagedProbationaryMaturityReadout(
+            feature_size,
+            10,
+            seed=config.seed,
+            regularization=config.cumulative_regularization,
+            max_neurons=config.maturity_max_neurons,
+            rbf_width=config.maturity_rbf_width,
+            min_center_distance=config.maturity_min_center_distance,
+            max_candidates=candidate_capacity,
         )
     elif kind in ("key_value", "key_value_entropy"):
         readout = KeyValueMaturityReadout(
@@ -700,6 +724,14 @@ def _learner_training_arrays(learner: OnlineReservoir) -> tuple[np.ndarray, ...]
                 [
                     learner.readout.responsible_key_sum,
                     learner.readout.responsibility_sample_count,
+                ]
+            )
+        if isinstance(learner.readout, ManagedProbationaryMaturityReadout):
+            arrays.extend(
+                [
+                    learner.readout.candidate_novelty,
+                    learner.readout.resolved_candidate_reclaims,
+                    learner.readout.novelty_candidate_replacements,
                 ]
             )
     elif isinstance(learner.readout, CumulativeMemoryReadout):

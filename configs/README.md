@@ -10,4 +10,5 @@ The factor-free complementary-memory defaults are in
 `factor_free_memory.json`; it includes fixed-key ungated, entropy-gated, and
 RLS-leverage-gated controls, probationary frozen keys, and adaptive key-value
 maturity variants. It also includes dense, top-k, winner-only, and normalized
-local-responsibility controls.
+local-responsibility controls plus evidence-managed 32/16/8-slot candidate
+pools.

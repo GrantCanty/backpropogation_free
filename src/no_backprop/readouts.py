@@ -888,17 +888,30 @@ class ProbationaryMaturityReadout(CumulativeMaturityReadout):
     is formed while a key is moving.
     """
 
+    max_candidates: int | None = None
+
     def __post_init__(self) -> None:
         self.leverage_gated = True
         super().__post_init__()
+        self.candidate_capacity = (
+            self.max_neurons
+            if self.max_candidates is None
+            else self.max_candidates
+        )
+        if self.candidate_capacity < 0:
+            raise ValueError("max_candidates cannot be negative")
         self.candidate_centers = np.zeros(
-            (self.max_neurons, self.input_size), dtype=np.float64
+            (self.candidate_capacity, self.input_size), dtype=np.float64
         )
-        self.candidate_counts = np.zeros(self.max_neurons, dtype=np.float64)
+        self.candidate_counts = np.zeros(
+            self.candidate_capacity, dtype=np.float64
+        )
         self.candidate_labels = np.full(
-            self.max_neurons, -1.0, dtype=np.float64
+            self.candidate_capacity, -1.0, dtype=np.float64
         )
-        self.candidate_active = np.zeros(self.max_neurons, dtype=np.float64)
+        self.candidate_active = np.zeros(
+            self.candidate_capacity, dtype=np.float64
+        )
         self.candidates_created = np.zeros(1, dtype=np.float64)
         self.candidates_promoted = np.zeros(1, dtype=np.float64)
         self.candidate_pool_rejections = np.zeros(1, dtype=np.float64)
@@ -970,6 +983,7 @@ class ProbationaryMaturityReadout(CumulativeMaturityReadout):
                 "probationary_keys": True,
                 "active_keys_are_frozen": True,
                 "pending_candidates": int(np.sum(self.candidate_active)),
+                "candidate_capacity": self.candidate_capacity,
                 "candidates_created": int(self.candidates_created[0]),
                 "candidates_promoted": int(self.candidates_promoted[0]),
                 "candidate_pool_rejections": int(
@@ -1066,6 +1080,110 @@ class ResponsibleProbationaryMaturityReadout(ProbationaryMaturityReadout):
             super().state_nbytes
             + self.responsible_key_sum.nbytes
             + self.responsibility_sample_count.nbytes
+        )
+
+
+@dataclass
+class ManagedProbationaryMaturityReadout(ProbationaryMaturityReadout):
+    """Probation with evidence-based reuse of bounded candidate capacity."""
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        self.candidate_novelty = np.zeros(
+            self.candidate_capacity, dtype=np.float64
+        )
+        self.resolved_candidate_reclaims = np.zeros(1, dtype=np.float64)
+        self.novelty_candidate_replacements = np.zeros(1, dtype=np.float64)
+
+    def _clear_candidate(self, index: int) -> None:
+        super()._clear_candidate(index)
+        self.candidate_novelty[index] = 0.0
+
+    def _candidate_prediction(self, index: int) -> FloatArray:
+        expanded = self._expanded_features(self.candidate_centers[index])
+        return self.expanded_weights @ expanded
+
+    def _managed_candidate_slot(self) -> int | None:
+        available = self._empty_candidate_slot()
+        if available is not None:
+            return available
+        active = np.flatnonzero(self.candidate_active > 0.0)
+        resolved: list[tuple[float, int]] = []
+        for index in active:
+            prediction = self._candidate_prediction(int(index))
+            label = int(self.candidate_labels[index])
+            if int(np.argmax(prediction)) == label:
+                sorted_scores = np.sort(prediction)
+                margin = (
+                    abs(float(sorted_scores[-1]))
+                    if len(sorted_scores) == 1
+                    else float(sorted_scores[-1] - sorted_scores[-2])
+                )
+                resolved.append((margin, int(index)))
+        if resolved:
+            index = max(resolved)[1]
+            self._clear_candidate(index)
+            self.resolved_candidate_reclaims[0] += 1.0
+            return index
+
+        if len(active) == 0:
+            return None
+        novelty = self.candidate_novelty[active]
+        position = int(np.argmax(novelty))
+        index = int(active[position])
+        if self._last_normalized_leverage >= self.candidate_novelty[index]:
+            return None
+        self._clear_candidate(index)
+        self.novelty_candidate_replacements[0] += 1.0
+        return index
+
+    def _recruit(self, features: FloatArray, target_class: int) -> bool:
+        candidate_index = self._managed_candidate_slot()
+        if candidate_index is None:
+            self.candidate_pool_rejections[0] += 1.0
+            return False
+        self.candidate_centers[candidate_index] = features
+        self.candidate_counts[candidate_index] = 1.0
+        self.candidate_labels[candidate_index] = float(target_class)
+        self.candidate_active[candidate_index] = 1.0
+        self.candidate_novelty[candidate_index] = (
+            self._last_normalized_leverage
+        )
+        self.candidates_created[0] += 1.0
+        return False
+
+    @property
+    def diagnostics(self) -> dict[str, float | int | bool]:
+        result = super().diagnostics
+        active = self.candidate_active > 0.0
+        result.update(
+            {
+                "managed_candidate_capacity": True,
+                "active_keys_replaced": 0,
+                "resolved_candidate_reclaims": int(
+                    self.resolved_candidate_reclaims[0]
+                ),
+                "novelty_candidate_replacements": int(
+                    self.novelty_candidate_replacements[0]
+                ),
+                "mean_pending_candidate_novelty": (
+                    0.0
+                    if not np.any(active)
+                    else float(np.mean(self.candidate_novelty[active]))
+                ),
+            }
+        )
+        return result
+
+    @property
+    def state_nbytes(self) -> int:
+        return super().state_nbytes + sum(
+            array.nbytes
+            for array in (
+                self.candidate_novelty,
+                self.resolved_candidate_reclaims,
+                self.novelty_candidate_replacements,
+            )
         )
 
 

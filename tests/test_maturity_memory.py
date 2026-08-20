@@ -13,6 +13,7 @@ from no_backprop.experiment import (
 from no_backprop.readouts import (
     CumulativeMaturityReadout,
     KeyValueMaturityReadout,
+    ManagedProbationaryMaturityReadout,
     ProbationaryMaturityReadout,
     ResponsibleProbationaryMaturityReadout,
     _normalized_entropy,
@@ -49,6 +50,7 @@ def test_maturity_models_have_no_forgetting_or_decay_parameter() -> None:
     for readout_class in (
         CumulativeMaturityReadout,
         KeyValueMaturityReadout,
+        ManagedProbationaryMaturityReadout,
         ProbationaryMaturityReadout,
         ResponsibleProbationaryMaturityReadout,
     ):
@@ -183,6 +185,39 @@ def test_local_responsibility_sparsifies_only_key_activities(
         assert np.sum(activities) < min(3, top_k)
 
 
+def test_managed_candidates_reclaim_resolved_proposals() -> None:
+    readout = ManagedProbationaryMaturityReadout(
+        1, 2, max_neurons=1, max_candidates=1
+    )
+    readout._last_normalized_leverage = 0.4
+    readout._recruit(np.array([1.0]), target_class=0)
+    assert readout.diagnostics["pending_candidates"] == 1
+
+    readout._last_normalized_leverage = 0.3
+    readout._recruit(np.array([-1.0]), target_class=1)
+    assert readout.diagnostics["resolved_candidate_reclaims"] == 1
+    assert readout.candidate_labels[0] == 1.0
+    np.testing.assert_array_equal(readout.candidate_centers[0], [-1.0])
+
+
+def test_managed_candidates_prefer_less_novel_proposals() -> None:
+    readout = ManagedProbationaryMaturityReadout(
+        1, 2, max_neurons=1, max_candidates=1
+    )
+    readout._last_normalized_leverage = 0.8
+    readout._recruit(np.array([1.0]), target_class=1)
+
+    readout._last_normalized_leverage = 0.2
+    readout._recruit(np.array([-1.0]), target_class=1)
+    assert readout.diagnostics["novelty_candidate_replacements"] == 1
+    assert np.isclose(readout.candidate_novelty[0], 0.2)
+
+    readout._last_normalized_leverage = 0.9
+    readout._recruit(np.array([0.5]), target_class=1)
+    assert readout.diagnostics["candidate_pool_rejections"] == 1
+    np.testing.assert_array_equal(readout.candidate_centers[0], [-1.0])
+
+
 def test_recruited_neuron_accumulates_maturity_evidence() -> None:
     readout = CumulativeMaturityReadout(
         2, 2, max_neurons=2, min_center_distance=0.01
@@ -216,6 +251,9 @@ def test_maturity_variants_run_locked_with_bounded_capacity() -> None:
         "probation_winner",
         "probation_top4_normalized",
         "probation_top2_normalized",
+        "probation_managed32",
+        "probation_managed16",
+        "probation_managed8",
         "key_value",
         "key_value_entropy",
     ):
@@ -371,3 +409,22 @@ def test_local_responsibility_checkpoint_round_trip(tmp_path) -> None:
     actual = _process_digit_image(restored, evaluation_image, target=None)
     np.testing.assert_allclose(actual, expected)
     assert restored.readout.diagnostics == learner.readout.diagnostics
+
+
+def test_managed_candidate_capacity_is_bounded_and_checkpointed(tmp_path) -> None:
+    config = DigitsExperimentConfig(
+        hidden_size=8, seed=31, maturity_max_neurons=4
+    )
+    small = build_digits_learner("probation_managed8", config)
+    large = build_digits_learner("probation_managed32", config)
+    assert small.state_nbytes < large.state_nbytes
+
+    rng = np.random.default_rng(31)
+    for label in (9, 1, 9, 5, 1):
+        _process_digit_image(
+            small, rng.uniform(size=(8, 8)), target=_digit_target(label)
+        )
+    path = save_checkpoint(small, tmp_path / "managed-candidates.npz")
+    restored = build_digits_learner("probation_managed8", config)
+    restore_checkpoint(restored, path)
+    assert restored.readout.diagnostics == small.readout.diagnostics

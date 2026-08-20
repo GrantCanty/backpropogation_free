@@ -16,6 +16,7 @@ from no_backprop.readouts import (
     DiagonalRLSReadout,
     FastSlowLMSReadout,
     KeyValueMaturityReadout,
+    ManagedProbationaryMaturityReadout,
     ProbationaryMaturityReadout,
     ProtectedFastSlowReadout,
     PrototypeReadout,
@@ -96,6 +97,16 @@ def save_checkpoint(learner: OnlineReservoir, destination: str | Path) -> Path:
             )
             arrays["readout_responsibility_sample_count"] = (
                 learner.readout.responsibility_sample_count
+            )
+        if isinstance(learner.readout, ManagedProbationaryMaturityReadout):
+            arrays["readout_candidate_novelty"] = (
+                learner.readout.candidate_novelty
+            )
+            arrays["readout_resolved_candidate_reclaims"] = (
+                learner.readout.resolved_candidate_reclaims
+            )
+            arrays["readout_novelty_candidate_replacements"] = (
+                learner.readout.novelty_candidate_replacements
             )
     elif isinstance(learner.readout, CumulativeMemoryReadout):
         arrays.update(
@@ -235,6 +246,22 @@ def restore_checkpoint(learner: OnlineReservoir, source: str | Path) -> None:
                     learner.readout.responsibility_sample_count,
                     arrays["readout_responsibility_sample_count"],
                     "readout_responsibility_sample_count",
+                )
+            if isinstance(learner.readout, ManagedProbationaryMaturityReadout):
+                _copy_array(
+                    learner.readout.candidate_novelty,
+                    arrays["readout_candidate_novelty"],
+                    "readout_candidate_novelty",
+                )
+                _copy_array(
+                    learner.readout.resolved_candidate_reclaims,
+                    arrays["readout_resolved_candidate_reclaims"],
+                    "readout_resolved_candidate_reclaims",
+                )
+                _copy_array(
+                    learner.readout.novelty_candidate_replacements,
+                    arrays["readout_novelty_candidate_replacements"],
+                    "readout_novelty_candidate_replacements",
                 )
         elif isinstance(learner.readout, CumulativeMemoryReadout):
             cumulative_arrays = (

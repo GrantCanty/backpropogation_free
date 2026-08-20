@@ -147,6 +147,9 @@ The controlled MVP passes the five gates in `PLAN.md`:
   unnormalized top-4 is slightly slower with matched quality, winner-only loses
   ordered online accuracy, and normalized top-k catastrophically harms final
   retention by forcing weak matches to carry unit activation
+- evidence-managed 16-slot candidate probation matches the 32-slot bank across
+  10 quality and drift seeds, cuts candidate rejection from 17.6 to 2.3 events
+  shuffled, and reduces state from 152.4 KB to 144.1 KB
 
 These results validate the experimental machinery and the narrow MVP
 hypotheses. They do **not** establish an advantage on real-world data or prove
@@ -157,8 +160,8 @@ that local learning generally outperforms backpropagation. See
 
 The `memory` branch now tests factor-free complementary, single-path maturity,
 and adaptive key-value representations. The next mechanism problem is reducing
-stranded probation candidates and managing bounded capacity without sacrificing
-the cumulative invariant.
+value-update interference through evidence-consolidated fast/slow values without
+introducing decay or a prediction router.
 JEPA-inspired predictive representations remain a later experiment; they are
 not an I-JEPA reimplementation, and no automatic differentiation or backward
 pass enters the core learner.

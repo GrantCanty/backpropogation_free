@@ -41,6 +41,9 @@ class FactorFreeMemoryConfig:
         "probation_winner",
         "probation_top4_normalized",
         "probation_top2_normalized",
+        "probation_managed32",
+        "probation_managed16",
+        "probation_managed8",
         "key_value",
         "key_value_entropy",
         "rls",
@@ -110,6 +113,9 @@ def run_factor_free_drift(config: FactorFreeMemoryConfig) -> dict[str, Any]:
             "maturity_probation": run_drift_model(
                 "maturity_probation", milestone_config
             ),
+            "probation_managed16": run_drift_model(
+                "probation_managed16", milestone_config
+            ),
             "key_value": run_drift_model("key_value", milestone_config),
             "key_value_entropy": run_drift_model(
                 "key_value_entropy", milestone_config
@@ -164,6 +170,9 @@ def run_factor_free_memory(
             "probation_winner",
             "probation_top4_normalized",
             "probation_top2_normalized",
+            "probation_managed32",
+            "probation_managed16",
+            "probation_managed8",
         )
     ]
     return {

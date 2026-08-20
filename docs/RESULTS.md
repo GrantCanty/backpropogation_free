@@ -549,6 +549,44 @@ Dense probation remains the foundation for the next experiment. The sparse
 variants stay available as matched negative controls and as possible inputs to
 later sparse-RLS scaling work.
 
+### Candidate-capacity management
+
+The unmanaged probation bank can strand one-observation proposals until all 32
+candidate slots are occupied. Managed probation never replaces an active frozen
+key. Under candidate-pool pressure it first reclaims a dormant center that the
+current model now classifies correctly. If none is resolved, a new proposal may
+replace the bank's most novel candidate only when the new proposal has lower
+normalized RLS leverage. Otherwise it is rejected. All associated observations
+remain in cumulative RLS statistics; only provisional structural summaries are
+reused, with no age score or forgetting factor.
+
+Ten-seed pool-size results are:
+
+| Candidate policy | Shuffled online | Shuffled final | Ordered online | Ordered final | Active keys (shuf./ord.) | State |
+|---|---:|---:|---:|---:|---:|---:|
+| Unmanaged 32 | 85.74% | 90.98% | 77.72% | 90.58% | 32.0 / 32.0 | 152.4 KB |
+| Managed 32 | **85.84%** | 90.93% | 77.72% | 90.58% | 32.0 / 32.0 | 152.7 KB |
+| Managed 16 | 85.75% | **91.08%** | 77.72% | 90.58% | 32.0 / 32.0 | 144.1 KB |
+| Managed 8 | 85.60% | 90.73% | **78.05%** | 90.50% | 24.8 / 32.0 | 139.8 KB |
+
+Managed-16 is the useful operating point. Relative to unmanaged probation its
+paired changes are +0.01 points shuffled-online, +0.10 shuffled-final, and
+exactly zero for both ordered metrics; every interval includes zero. It reclaims
+48.8 now-resolved candidates and makes 19.0 lower-novelty replacements on
+average shuffled, reducing outright pool rejection from 17.6 events to 2.3.
+Ordered data needs only 1.6 reclaims and no novelty replacements. State falls
+5.5%, from 152.4 to 144.1 KB, and runtime is unchanged within noise.
+
+Managed-8 is too restrictive: it activates only 24.8 keys on average shuffled
+and increases forgetting by 0.63 points with a nominal paired interval of +0.17
+to +1.08. Managed-32 removes rejection but adds state and slightly worsens mean
+shuffled forgetting, so it offers no advantage over 16 slots.
+
+On the 10-seed drift benchmark, managed-16 changes final original accuracy by
++0.10 points and final inverted accuracy by +0.13; all paired intervals cross
+zero. Managed-16 therefore advances as the bounded candidate foundation for
+the fast/slow-value experiment.
+
 ### Adaptive key-value neuron experiment
 
 The attention-inspired variant keeps the same single output path but makes each
@@ -642,6 +680,8 @@ calibrate predictive uncertainty, and scale the neuron bank.
   candidate bank adds 12.6% state and can accumulate stranded proposals.
 - Dense local responsibility remains best. Top-k adds selection overhead without
   reducing exact-RLS work, while normalization causes severe ordered forgetting.
+- Evidence-managed 16-slot probation reduces candidate state and rejection with
+  matched quality; an 8-slot bank prevents enough shuffled keys from maturing.
 - Adaptive keys introduce nonlinear basis drift, add 24% state and about 6%
   NumPy CPU time, and have only a small three-seed adaptation gain.
 - Past observations have no counterfactual activations for neurons recruited
@@ -649,6 +689,5 @@ calibrate predictive uncertainty, and scale the neuron bank.
   replay, but does not provide a formal non-interference guarantee.
 
 The next mechanism experiment should keep the cumulative single-path invariant
-while reducing stranded candidate representations and managing bounded
-capacity. A capacity-width scaling study should precede learned or expanding
-encoders.
+while testing evidence-consolidated fast/slow values without decay or routing.
+A capacity-width scaling study should precede learned or expanding encoders.
