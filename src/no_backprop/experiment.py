@@ -38,6 +38,7 @@ from no_backprop.readouts import (
     RLSReadout,
 )
 from no_backprop.reservoir import OnlineReservoir, ReservoirConfig
+from no_backprop.spatial import OnlineSpatialClassifier, SpatialClassifierConfig
 from no_backprop.streams import (
     ContinualClassificationConfig,
     DelayedAssociationConfig,
@@ -453,13 +454,46 @@ DigitsKind = Literal[
     "managed16_fast_slow_values",
     "key_value",
     "key_value_entropy",
+    "managed16_pixels",
+    "managed16_fixed_conv",
 ]
+
+
+DigitsLearner = OnlineReservoir | OnlineSpatialClassifier
 
 
 def build_digits_learner(
     kind: DigitsKind, config: DigitsExperimentConfig
-) -> OnlineReservoir:
-    """Build a row-sequence classifier for 8x8 images."""
+) -> DigitsLearner:
+    """Build a recurrent or full-image classifier for 8x8 images."""
+
+    if kind in ("managed16_pixels", "managed16_fixed_conv"):
+        if config.hidden_size != 64:
+            raise ValueError(
+                "matched spatial frontends require hidden_size=64"
+            )
+        readout = ManagedProbationaryMaturityReadout(
+            65,
+            10,
+            seed=config.seed,
+            regularization=config.cumulative_regularization,
+            max_neurons=config.maturity_max_neurons,
+            rbf_width=config.maturity_rbf_width,
+            min_center_distance=config.maturity_min_center_distance,
+            max_candidates=16,
+        )
+        frontend = (
+            "pixels" if kind == "managed16_pixels" else "fixed_convolution"
+        )
+        return OnlineSpatialClassifier(
+            SpatialClassifierConfig(
+                image_size=8,
+                output_size=10,
+                frontend=frontend,
+                seed=config.seed,
+            ),
+            readout,
+        )
 
     reservoir_config = ReservoirConfig(
         input_size=8,
@@ -648,15 +682,20 @@ def _digit_target(label: int) -> np.ndarray:
 
 
 def _process_digit_image(
-    learner: OnlineReservoir,
+    learner: DigitsLearner,
     image: np.ndarray,
     *,
     target: np.ndarray | None,
 ) -> np.ndarray:
-    """Process eight rows and optionally learn once from the final prediction."""
+    """Process one image and optionally learn once from its prediction."""
 
     learner.reset_state()
     no_feedback = np.full(10, np.nan, dtype=np.float64)
+    if isinstance(learner, OnlineSpatialClassifier):
+        prediction = learner.predict(image)
+        learner.learn(target if target is not None else no_feedback)
+        return prediction
+
     prediction = np.zeros(10, dtype=np.float64)
     for row_index, row in enumerate(image):
         prediction = learner.predict(row)
@@ -666,7 +705,7 @@ def _process_digit_image(
 
 
 def _evaluate_digits(
-    learner: OnlineReservoir, images: np.ndarray, labels: np.ndarray
+    learner: DigitsLearner, images: np.ndarray, labels: np.ndarray
 ) -> dict[str, Any]:
     correct = np.zeros(len(labels), dtype=np.float64)
     losses = np.zeros(len(labels), dtype=np.float64)
@@ -687,7 +726,7 @@ def _evaluate_digits(
     }
 
 
-def _learner_training_arrays(learner: OnlineReservoir) -> tuple[np.ndarray, ...]:
+def _learner_training_arrays(learner: DigitsLearner) -> tuple[np.ndarray, ...]:
     """Return all arrays that evaluation must never modify."""
 
     arrays = [learner.input_weights, learner.recurrent_weights, learner.bias]
@@ -801,7 +840,7 @@ def _learner_training_arrays(learner: OnlineReservoir) -> tuple[np.ndarray, ...]
 
 
 def _evaluate_digits_locked(
-    learner: OnlineReservoir, images: np.ndarray, labels: np.ndarray
+    learner: DigitsLearner, images: np.ndarray, labels: np.ndarray
 ) -> dict[str, Any]:
     """Evaluate without feedback and verify that all learned arrays stay fixed."""
 
@@ -963,6 +1002,7 @@ def run_digits_model(
         "training_seconds": training_seconds,
         "evaluation_seconds": evaluation_seconds,
         "training_images_per_second": trained_samples / training_seconds,
+        "readout_feature_width": learner.readout.input_size - 1,
         "state_bytes_before": initial_state_bytes,
         "state_bytes_after": learner.state_nbytes,
         "bounded_state": initial_state_bytes == learner.state_nbytes,
@@ -979,6 +1019,17 @@ def run_digits_model(
         result["memory_diagnostics"] = learner.readout.diagnostics
     if isinstance(learner.readout, CumulativeMaturityReadout):
         result["maturity_diagnostics"] = learner.readout.diagnostics
+    result["frontend_diagnostics"] = (
+        learner.diagnostics
+        if isinstance(learner, OnlineSpatialClassifier)
+        else {
+            "frontend": "row_reservoir",
+            "recurrent": True,
+            "image_events_per_prediction": 8,
+            "feature_width": config.hidden_size,
+            "fixed_frontend": True,
+        }
+    )
     return result
 
 

@@ -20,6 +20,10 @@ from no_backprop.replication import ReplicationConfig, run_replication
 from no_backprop.plotting import load_result, plot_result
 from no_backprop.milestone6 import Milestone6Config, run_milestone6
 from no_backprop.factor_free import FactorFreeMemoryConfig, run_factor_free_memory
+from no_backprop.frontend_comparison import (
+    FrontendComparisonConfig,
+    run_frontend_comparison,
+)
 from no_backprop.scaling import (
     BlankImageScalingConfig,
     FeatureWidthScalingConfig,
@@ -147,6 +151,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
     scaling.add_argument("--seed", type=int, default=41)
     scaling.add_argument("--output", type=str)
+    frontends = subparsers.add_parser(
+        "frontends",
+        help="compare recurrent, pixel, and fixed-convolution image frontends",
+    )
+    frontends.add_argument(
+        "--seeds",
+        type=int,
+        nargs="+",
+        default=[3, 7, 11, 17, 23, 29, 37, 41, 47, 53],
+    )
+    frontends.add_argument("--test-per-class", type=int, default=40)
+    frontends.add_argument("--augmentation-copies", type=int, default=1)
+    frontends.add_argument("--no-drift", action="store_true")
+    frontends.add_argument("--output", type=str)
     replicate = subparsers.add_parser(
         "replicate", help="run delayed and continual benchmarks across seeds"
     )
@@ -264,6 +282,18 @@ def main(argv: list[str] | None = None) -> int:
                 updates=args.capacity_updates,
                 seed=args.seed + 6,
             ),
+        )
+        if args.output:
+            write_json_result(result, args.output)
+        print(json.dumps(result, indent=2, sort_keys=True))
+    elif args.command == "frontends":
+        result = run_frontend_comparison(
+            FrontendComparisonConfig(
+                seeds=tuple(args.seeds),
+                test_per_class=args.test_per_class,
+                augmentation_copies=args.augmentation_copies,
+                include_drift=not args.no_drift,
+            )
         )
         if args.output:
             write_json_result(result, args.output)

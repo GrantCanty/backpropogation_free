@@ -697,6 +697,52 @@ learned without backpropagation. Entropy still comes from uncalibrated ridge
 scores whose mean is near its maximum. Future work should address basis drift,
 calibrate predictive uncertainty, and scale the neuron bank.
 
+### Matched non-recurrent image frontends
+
+The next experiment changes only image ingestion. All models expose 64 features
+plus a bias coordinate to the same Managed-16 readout. The recurrent control
+processes eight ordered rows. The pixel control flattens the complete 8x8 image.
+The convolutional control applies four seeded, fixed, zero-mean orthogonal 3x3
+filters, `tanh`, and 2x2 average pooling to produce exactly 64 features. Neither
+spatial frontend has trainable encoder state, and every model receives one
+label update per image. The design was fixed before the ten-seed comparison.
+
+| Protocol / frontend | Online | Final | Forgetting | Images/s | State |
+|---|---:|---:|---:|---:|---:|
+| Shuffled / recurrent | 85.75% | 91.08% | 1.55 points | 2,342 | 144.1 KB |
+| Shuffled / pixels | 90.69% | 93.53% | 2.00 points | **8,850** | **107.1 KB** |
+| Shuffled / fixed conv | **91.10%** | **94.28%** | **1.50 points** | 5,309 | 107.4 KB |
+| Augmented / recurrent | 68.67% | 88.65% | 2.10 points | 2,204 | 144.1 KB |
+| Augmented / pixels | 66.54% | 91.48% | 2.35 points | **6,312** | **107.1 KB** |
+| Augmented / fixed conv | **69.82%** | **92.90%** | **1.53 points** | 4,303 | 107.4 KB |
+| Ordered / recurrent | 77.72% | 90.58% | 3.98 points | 2,547 | 144.1 KB |
+| Ordered / pixels | **82.18%** | 93.55% | 3.05 points | **7,465** | **107.1 KB** |
+| Ordered / fixed conv | 81.85% | **94.43%** | **2.75 points** | 4,783 | 107.4 KB |
+
+Against recurrence, fixed convolution gains 5.35 ± 0.97 shuffled-online,
+3.20 ± 1.10 shuffled-final, 1.15 ± 0.86 augmented-online, 4.25 ± 1.03
+augmented-final, 4.14 ± 0.86 ordered-online, and 3.85 ± 1.12 ordered-final
+percentage points. These are paired means and nominal 95% Student-t
+half-widths across seeds 3, 7, 11, 17, 23, 29, 37, 41, 47, and 53. Every
+accuracy interval excludes zero. The convolutional frontend also lowers
+ordered forgetting by 1.23 ± 0.78 points.
+
+The recurring-domain result reverses that ranking:
+
+| Frontend | Original forgetting after inversion | Final original | Final inverted |
+|---|---:|---:|---:|
+| Recurrent | **4.33 points** | 88.55% | **75.98%** |
+| Pixels | 65.65 points | **93.35%** | 0.73% |
+| Fixed conv | 37.48 points | 89.33% | 10.58% |
+
+After the original domain returns, pixels and fixed convolution retain 75.25 ±
+2.25 and 65.40 ± 2.66 fewer inverted-domain points than recurrence. Removing
+row recurrence is therefore an ordinary-classification and systems win, not yet
+a complete continual-representation win. The spatial frontend advances to the
+predictive-representation experiment because it preserves image locality and
+parallelism; the recurrent model remains a required drift control until a
+learned spatial representation recovers coexistence of both domains.
+
 ## Limitations and next decision
 
 - All tasks are synthetic and small.
@@ -705,9 +751,10 @@ calibrate predictive uncertainty, and scale the neuron bank.
 - Per-synapse eligibility scales quadratically in a dense recurrent layer.
 - There is no adversarial update protection or production safety layer.
 - Retention still declines when context zero returns.
-- Most image results are only three seeds on a small bundled dataset. The
-  leverage experiment uses 10 seeds, but its intervals are not corrected for
-  multiple comparisons, and hyperparameters were not formally tuned.
+- Some image results are only three seeds on a small bundled dataset. The
+  leverage, responsibility, capacity, value, and frontend experiments use 10
+  seeds, but their intervals are not corrected for multiple comparisons, and
+  hyperparameters were not formally tuned.
 - The augmentation doubles exposure; it has not yet been compared with simply
   repeating the original stream for the same number of updates.
 - RLS's strong retention uses quadratic state, so it is not yet a scalable
@@ -733,6 +780,9 @@ calibrate predictive uncertainty, and scale the neuron bank.
 - Fast values increase immediate ordered plasticity but significantly worsen
   retention; evidence-doubling consolidation is algebraically lossless yet
   further destabilizes subsequent learning.
+- Fixed convolution improves ordinary, augmented, and ordered accuracy while
+  reducing state and CPU time, but fails to retain the inverted domain after
+  the original domain returns; recurrence remains the drift control.
 - Adaptive keys introduce nonlinear basis drift, add 24% state and about 6%
   NumPy CPU time, and have only a small three-seed adaptation gain.
 - Past observations have no counterfactual activations for neurons recruited

@@ -25,6 +25,10 @@ from no_backprop.readouts import (
     RLSReadout,
 )
 from no_backprop.reservoir import OnlineReservoir
+from no_backprop.spatial import OnlineSpatialClassifier
+
+
+CheckpointLearner = OnlineReservoir | OnlineSpatialClassifier
 
 
 def _copy_array(target: np.ndarray, source: np.ndarray, name: str) -> None:
@@ -35,7 +39,7 @@ def _copy_array(target: np.ndarray, source: np.ndarray, name: str) -> None:
     np.copyto(target, source)
 
 
-def save_checkpoint(learner: OnlineReservoir, destination: str | Path) -> Path:
+def save_checkpoint(learner: CheckpointLearner, destination: str | Path) -> Path:
     """Atomically save all persistent model and plasticity state."""
 
     if learner._pending_prediction is not None:
@@ -181,7 +185,7 @@ def save_checkpoint(learner: OnlineReservoir, destination: str | Path) -> Path:
     return path
 
 
-def restore_checkpoint(learner: OnlineReservoir, source: str | Path) -> None:
+def restore_checkpoint(learner: CheckpointLearner, source: str | Path) -> None:
     """Restore a checkpoint into a learner with the same architecture."""
 
     if learner._pending_prediction is not None:

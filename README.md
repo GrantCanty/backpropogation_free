@@ -30,6 +30,7 @@ The experimental contract and milestone plan are in [PLAN.md](PLAN.md).
 - JSON results and optional plots
 - Lazy 8x8/28x28 stream-length, feature-width, and managed-memory capacity
   scaling benchmarks
+- Matched recurrent, raw-pixel, and fixed-convolution image frontends
 
 All current data is generated or bundled locally and handled deterministically.
 Running the MVP does not download a dataset.
@@ -46,6 +47,8 @@ PYTHONPATH=src python3 -m no_backprop memory --output results/milestone6.json
 PYTHONPATH=src python3 -m no_backprop cumulative-memory \
   --output results/cumulative-memory.json
 PYTHONPATH=src python3 -m no_backprop scale --output results/scaling.json
+PYTHONPATH=src python3 -m no_backprop frontends \
+  --output results/frontend-comparison.json
 PYTHONPATH=src python3 -m no_backprop replicate --output results/replication.json
 
 # Conventional comparison, kept outside the core package
@@ -89,6 +92,19 @@ top-k key activation alone does not make that update sparse. Candidate storage
 grows only linearly, although scanning a larger full candidate bank also reduces
 throughput. These figures are systems measurements on blank/generated inputs,
 not accuracy claims or a substitute for the later Fashion-MNIST experiment.
+
+The frontends command holds the 64-coordinate representation width and
+Managed-16 readout fixed. Raw pixels and four fixed orthogonal 3x3 filters with
+2x2 average pooling consume one complete image per event; only the existing
+reservoir consumes eight sequential rows. Across 10 paired seeds, fixed
+convolution improves shuffled online/final accuracy by 5.35/3.20 points,
+augmented final accuracy by 4.25 points, and ordered online/final accuracy by
+4.14/3.85 points. It uses 107.4 KB rather than 144.1 KB and trains roughly
+1.9--2.3 times faster on this CPU. However, after an
+original/inverted/original stream it retains only 10.58% inverted accuracy,
+versus 75.98% for the recurrent representation. Fixed convolution therefore
+advances as the spatial basis for predictive-representation experiments, while
+the recurrent model remains the retention control rather than being removed.
 
 The cumulative-memory command tests both factor-free branches. Every labeled
 observation updates cumulative statistics with unit weight, no raw image is
