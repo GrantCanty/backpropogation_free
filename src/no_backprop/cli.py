@@ -53,6 +53,7 @@ def build_parser() -> argparse.ArgumentParser:
     digits.add_argument("--hidden-size", type=int, default=64)
     digits.add_argument("--test-per-class", type=int, default=40)
     digits.add_argument("--passes", type=int, default=1)
+    digits.add_argument("--augmentation-copies", type=int, default=1)
     digits.add_argument("--seed", type=int, default=29)
     digits.add_argument("--output", type=str)
     replicate = subparsers.add_parser(
@@ -106,6 +107,7 @@ def main(argv: list[str] | None = None) -> int:
             hidden_size=args.hidden_size,
             test_per_class=args.test_per_class,
             passes=args.passes,
+            augmentation_copies=args.augmentation_copies,
             seed=args.seed,
         )
         result = run_digits_experiment(config)

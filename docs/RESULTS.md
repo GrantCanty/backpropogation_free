@@ -9,7 +9,7 @@ the implementations in this repository, not for general performance claims.
 
 ## Verification
 
-The complete suite contains 27 tests covering:
+The complete suite contains 30 tests covering:
 
 - strict predict-before-learn ordering
 - deterministic streams
@@ -21,6 +21,8 @@ The complete suite contains 27 tests covering:
 - BPTT activation-memory scaling
 - smoke experiments and multi-seed aggregation
 - deterministic local digits splits and matched stream orderings
+- deterministic augmentation and weight-locked evaluation for both learner
+  families
 
 Run it with:
 
@@ -108,10 +110,12 @@ scikit-learn; no data was downloaded. A deterministic stratified split holds out
 image is processed as eight sequential row-events. The prediction is scored and
 the label is learned only after row eight.
 
-The same split is presented in two ways:
+The same split is presented in three ways:
 
 - **Shuffled:** all classes are interleaved, testing ordinary cumulative
   learning and held-out generalization.
+- **Shuffled augmented:** the original training images plus one deterministically
+  translated/noisy copy are interleaved. Held-out images are never augmented.
 - **Class ordered:** all examples of class 0 arrive, then class 1, and so on,
   testing immediate adaptation and retention of earlier classes.
 
@@ -144,6 +148,48 @@ fast/slow rule does not provide useful consolidation on this harder stream.
 Those are negative but actionable findings: the next mechanism experiment
 should target consolidation, not recurrent credit assignment.
 
+### Matched BPTT comparison and augmentation
+
+The conventional comparison is a parameter-matched tanh RNN with the same
+64-unit hidden width and 5,322 model parameters. It sees each image as the same
+eight-row sequence, predicts before its update, and performs one Adam/BPTT
+update per image. This deliberately matches exposure count and batch size; it
+is a comparison of learning rules, not a many-epoch offline accuracy ceiling.
+
+Before every evaluation, the NumPy learner snapshots all learned arrays and the
+PyTorch baseline snapshots every model parameter. The NumPy path withholds
+feedback; the PyTorch path uses `eval()` and `no_grad()`. Both abort if any
+learned value changes, and the NumPy path restores its transient activity and
+eligibility traces afterward. Thus the 400 held-out images never train either
+model or influence the next training event.
+
+| Stream | Learner | Online accuracy | Final test accuracy | Worst class | Mean forgetting | Train images/s |
+|---|---|---:|---:|---:|---:|---:|
+| Shuffled | LMS | 59.53% ± 1.47 | 67.33% ± 7.88 | 18.33% | 0.229 | 7,673 |
+| Shuffled | RLS | **85.80% ± 0.79** | **90.83% ± 1.28** | **75.83%** | **0.017** | 6,862 |
+| Shuffled | Eligibility + LMS | 59.51% ± 1.54 | 67.50% ± 8.13 | 18.33% | 0.227 | 3,375 |
+| Shuffled | Fast/slow | 47.75% ± 2.25 | 58.42% ± 6.50 | 9.17% | 0.314 | 3,239 |
+| Shuffled | BPTT + Adam | 77.59% ± 2.11 | 88.92% ± 3.50 | 60.83% | 0.064 | 1,328 |
+| Augmented | LMS | 40.07% ± 1.92 | 67.33% ± 9.83 | 16.67% | 0.238 | 7,384 |
+| Augmented | RLS | **68.35% ± 1.08** | 88.25% ± 1.09 | 70.00% | **0.043** | 6,707 |
+| Augmented | Eligibility + LMS | 40.01% ± 1.94 | 67.42% ± 9.64 | 15.83% | 0.237 | 3,429 |
+| Augmented | Fast/slow | 32.61% ± 1.77 | 59.25% ± 8.13 | 8.33% | 0.314 | 3,159 |
+| Augmented | BPTT + Adam | 62.15% ± 1.23 | **90.08% ± 0.58** | **75.83%** | 0.053 | 1,314 |
+
+On the matched single-pass shuffled stream, RLS and BPTT are statistically
+close in final accuracy; RLS is slightly higher in this three-seed sample and
+about five times faster on this CPU. This throughput result is implementation-
+and-hardware-specific, not an energy claim. BPTT's lower online accuracy but
+strong final accuracy also shows that prequential and held-out measurements
+answer different questions.
+
+The augmentation is a real intervention, not an assumed improvement. It adds
+translations and noise, doubles training exposure to 2,794 images, and reduces
+online accuracy because examples are harder. It improves BPTT's mean held-out
+accuracy and sharply reduces its seed variance, but slightly reduces RLS's mean
+accuracy. The next augmentation study should separate translation from noise
+and match total exposure with a repeated-unaugmented control.
+
 ## Acceptance gates
 
 1. **Mechanical correctness:** passed; core code has no autograd dependency.
@@ -165,6 +211,8 @@ should target consolidation, not recurrent credit assignment.
 - Retention still declines when context zero returns.
 - The image results are only three seeds on a small bundled dataset, and their
   hyperparameters were transferred rather than formally tuned.
+- The augmentation doubles exposure; it has not yet been compared with simply
+  repeating the original stream for the same number of updates.
 - RLS's strong retention uses quadratic state, so it is not yet a scalable
   answer to continual learning.
 - CPU throughput does not establish energy or accelerator efficiency.

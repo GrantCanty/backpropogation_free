@@ -8,7 +8,7 @@ from typing import Literal
 import numpy as np
 
 
-DigitsProtocol = Literal["shuffled", "class_ordered"]
+DigitsProtocol = Literal["shuffled", "shuffled_augmented", "class_ordered"]
 
 
 @dataclass(frozen=True)
@@ -75,6 +75,54 @@ def load_digits_split(*, test_per_class: int = 40, seed: int = 0) -> DigitsSplit
     )
 
 
+def augment_digits_split(
+    split: DigitsSplit,
+    *,
+    copies: int = 1,
+    max_shift: int = 1,
+    noise_std: float = 0.03,
+    seed: int = 0,
+) -> DigitsSplit:
+    """Add deterministic shifted/noisy training copies without changing test data."""
+
+    if copies < 0:
+        raise ValueError("copies cannot be negative")
+    if max_shift < 0:
+        raise ValueError("max_shift cannot be negative")
+    if noise_std < 0.0:
+        raise ValueError("noise_std cannot be negative")
+    if copies == 0:
+        return split
+
+    rng = np.random.default_rng(seed)
+    image_groups = [split.train_images]
+    label_groups = [split.train_labels]
+    for _ in range(copies):
+        augmented = np.empty_like(split.train_images)
+        for index, image in enumerate(split.train_images):
+            row_shift = int(rng.integers(-max_shift, max_shift + 1))
+            column_shift = int(rng.integers(-max_shift, max_shift + 1))
+            shifted = np.roll(image, shift=(row_shift, column_shift), axis=(0, 1))
+            if row_shift > 0:
+                shifted[:row_shift, :] = 0.0
+            elif row_shift < 0:
+                shifted[row_shift:, :] = 0.0
+            if column_shift > 0:
+                shifted[:, :column_shift] = 0.0
+            elif column_shift < 0:
+                shifted[:, column_shift:] = 0.0
+            noise = rng.normal(0.0, noise_std, size=shifted.shape)
+            augmented[index] = np.clip(shifted + noise, 0.0, 1.0)
+        image_groups.append(augmented)
+        label_groups.append(split.train_labels.copy())
+    return DigitsSplit(
+        train_images=np.concatenate(image_groups),
+        train_labels=np.concatenate(label_groups),
+        test_images=split.test_images,
+        test_labels=split.test_labels,
+    )
+
+
 def build_digits_segments(
     labels: np.ndarray,
     *,
@@ -92,7 +140,7 @@ def build_digits_segments(
     labels = np.asarray(labels, dtype=np.int64)
     if labels.ndim != 1 or len(labels) == 0:
         raise ValueError("labels must be a non-empty vector")
-    if protocol not in ("shuffled", "class_ordered"):
+    if protocol not in ("shuffled", "shuffled_augmented", "class_ordered"):
         raise ValueError(f"unknown digits protocol: {protocol}")
     if passes <= 0:
         raise ValueError("passes must be positive")
@@ -102,7 +150,7 @@ def build_digits_segments(
     segments: list[DigitsSegment] = []
     segment_index = 0
     for pass_index in range(passes):
-        if protocol == "shuffled":
+        if protocol in ("shuffled", "shuffled_augmented"):
             chunks = np.array_split(rng.permutation(len(labels)), len(classes))
             pass_segments = [(None, chunk) for chunk in chunks]
         else:

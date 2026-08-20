@@ -6,8 +6,12 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 from baselines.bptt import BPTTConfig, run_bptt_signal
+from baselines.digits import BPTTDigitsConfig, run_bptt_digits
+from no_backprop.digits import augment_digits_split, load_digits_split
 from no_backprop.experiment import (
+    DigitsExperimentConfig,
     SignalExperimentConfig,
+    run_digits_model,
     run_signal_model,
 )
 
@@ -19,6 +23,18 @@ class SystemsComparisonConfig:
     hidden_size: int = 64
     seed: int = 7
     bptt_windows: tuple[int, ...] = (8, 32, 128)
+
+
+@dataclass(frozen=True)
+class DigitsSystemsComparisonConfig:
+    hidden_size: int = 64
+    test_per_class: int = 40
+    passes: int = 1
+    augmentation_copies: int = 1
+    augmentation_max_shift: int = 1
+    augmentation_noise_std: float = 0.03
+    seed: int = 29
+    bptt_learning_rate: float = 0.001
 
 
 def run_systems_comparison(config: SystemsComparisonConfig) -> dict[str, Any]:
@@ -48,4 +64,65 @@ def run_systems_comparison(config: SystemsComparisonConfig) -> dict[str, Any]:
         "config": asdict(config),
         "online": online,
         "bptt": bptt,
+    }
+
+
+def run_digits_systems_comparison(
+    config: DigitsSystemsComparisonConfig,
+) -> dict[str, Any]:
+    """Compare local updates and BPTT on identical shuffled image streams."""
+
+    split = load_digits_split(test_per_class=config.test_per_class, seed=config.seed)
+    augmented = augment_digits_split(
+        split,
+        copies=config.augmentation_copies,
+        max_shift=config.augmentation_max_shift,
+        noise_std=config.augmentation_noise_std,
+        seed=config.seed + 3,
+    )
+    local_config = DigitsExperimentConfig(
+        hidden_size=config.hidden_size,
+        test_per_class=config.test_per_class,
+        passes=config.passes,
+        augmentation_copies=config.augmentation_copies,
+        augmentation_max_shift=config.augmentation_max_shift,
+        augmentation_noise_std=config.augmentation_noise_std,
+        seed=config.seed,
+    )
+    bptt_config = BPTTDigitsConfig(
+        hidden_size=config.hidden_size,
+        test_per_class=config.test_per_class,
+        passes=config.passes,
+        augmentation_copies=config.augmentation_copies,
+        augmentation_max_shift=config.augmentation_max_shift,
+        augmentation_noise_std=config.augmentation_noise_std,
+        seed=config.seed,
+        learning_rate=config.bptt_learning_rate,
+    )
+    kinds = ("lms", "rls", "eligibility", "fast_slow")
+    return {
+        "experiment": "digits_shuffled_systems_comparison",
+        "config": asdict(config),
+        "dataset": {
+            "train_samples": len(split.train_labels),
+            "augmented_train_samples": len(augmented.train_labels),
+            "test_samples": len(split.test_labels),
+        },
+        "protocols": {
+            protocol: {
+                "local": {
+                    kind: run_digits_model(
+                        kind, protocol, local_config, split=protocol_split
+                    )
+                    for kind in kinds
+                },
+                "bptt": run_bptt_digits(
+                    bptt_config, protocol=protocol, split=protocol_split
+                ),
+            }
+            for protocol, protocol_split in (
+                ("shuffled", split),
+                ("shuffled_augmented", augmented),
+            )
+        },
     }

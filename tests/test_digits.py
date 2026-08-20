@@ -1,7 +1,12 @@
 import numpy as np
 import pytest
 
-from no_backprop.digits import DigitsSplit, build_digits_segments, load_digits_split
+from no_backprop.digits import (
+    DigitsSplit,
+    augment_digits_split,
+    build_digits_segments,
+    load_digits_split,
+)
 from no_backprop.experiment import DigitsExperimentConfig, run_digits_model
 
 
@@ -35,6 +40,22 @@ def test_shuffled_and_class_ordered_streams_cover_the_same_examples() -> None:
     )
 
 
+def test_augmentation_is_deterministic_and_never_changes_test_data() -> None:
+    rng = np.random.default_rng(5)
+    split = DigitsSplit(
+        train_images=rng.uniform(size=(6, 8, 8)),
+        train_labels=np.arange(6),
+        test_images=rng.uniform(size=(3, 8, 8)),
+        test_labels=np.arange(3),
+    )
+    left = augment_digits_split(split, copies=1, seed=9)
+    right = augment_digits_split(split, copies=1, seed=9)
+    assert len(left.train_images) == 2 * len(split.train_images)
+    np.testing.assert_array_equal(left.train_images, right.train_images)
+    np.testing.assert_array_equal(left.test_images, split.test_images)
+    np.testing.assert_array_equal(left.test_labels, split.test_labels)
+
+
 @pytest.mark.parametrize("protocol", ["shuffled", "class_ordered"])
 def test_digits_model_runs_prequentially_and_keeps_bounded_state(protocol: str) -> None:
     rng = np.random.default_rng(3)
@@ -54,5 +75,7 @@ def test_digits_model_runs_prequentially_and_keeps_bounded_state(protocol: str) 
     )
     assert result["trained_samples"] == len(train_labels)
     assert result["bounded_state"]
+    assert result["weights_locked_during_evaluation"]
+    assert result["transient_state_restored_after_evaluation"]
     assert len(result["evaluation_history"]) == 3
     assert 0.0 <= result["final_test_accuracy"] <= 1.0

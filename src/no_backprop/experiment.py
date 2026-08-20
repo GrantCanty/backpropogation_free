@@ -15,6 +15,7 @@ from no_backprop.eligibility import EligibilityConfig, EligibilityReservoir
 from no_backprop.digits import (
     DigitsSplit,
     DigitsProtocol,
+    augment_digits_split,
     build_digits_segments,
     load_digits_split,
 )
@@ -87,6 +88,9 @@ class DigitsExperimentConfig:
     hidden_size: int = 64
     test_per_class: int = 40
     passes: int = 1
+    augmentation_copies: int = 1
+    augmentation_max_shift: int = 1
+    augmentation_noise_std: float = 0.03
     seed: int = 29
     window: int = 100
     lms_learning_rate: float = 0.18
@@ -508,6 +512,51 @@ def _evaluate_digits(
     }
 
 
+def _learner_training_arrays(learner: OnlineReservoir) -> tuple[np.ndarray, ...]:
+    """Return all arrays that evaluation must never modify."""
+
+    arrays = [learner.input_weights, learner.recurrent_weights, learner.bias]
+    if isinstance(learner.readout, FastSlowLMSReadout):
+        arrays.extend(
+            [learner.readout.slow_weights, learner.readout.fast_weights]
+        )
+    else:
+        arrays.append(learner.readout.weights)
+    if isinstance(learner.readout, RLSReadout):
+        arrays.append(learner.readout.inverse_correlation)
+    if isinstance(learner, EligibilityReservoir):
+        arrays.append(learner.feedback_weights)
+    return tuple(arrays)
+
+
+def _evaluate_digits_locked(
+    learner: OnlineReservoir, images: np.ndarray, labels: np.ndarray
+) -> dict[str, Any]:
+    """Evaluate without feedback and verify that all learned arrays stay fixed."""
+
+    before = [array.copy() for array in _learner_training_arrays(learner)]
+    transient_arrays = [learner.state]
+    if isinstance(learner, EligibilityReservoir):
+        transient_arrays.extend(
+            [learner.recurrent_eligibility, learner.input_eligibility]
+        )
+    transient_before = [array.copy() for array in transient_arrays]
+    try:
+        result = _evaluate_digits(learner, images, labels)
+    finally:
+        for previous, current in zip(transient_before, transient_arrays):
+            np.copyto(current, previous)
+    unchanged = all(
+        np.array_equal(previous, current)
+        for previous, current in zip(before, _learner_training_arrays(learner))
+    )
+    if not unchanged:
+        raise RuntimeError("evaluation modified no-backprop learner weights")
+    result["weights_unchanged"] = True
+    result["transient_state_restored"] = True
+    return result
+
+
 def _digits_forgetting(history: list[dict[str, Any]]) -> dict[str, Any]:
     """Measure loss from each class's best post-exposure score to final score."""
 
@@ -560,7 +609,7 @@ def run_digits_model(
     evaluation_seconds = 0.0
 
     started = time.perf_counter()
-    initial_evaluation = _evaluate_digits(
+    initial_evaluation = _evaluate_digits_locked(
         learner, data.test_images, data.test_labels
     )
     evaluation_seconds += time.perf_counter() - started
@@ -609,7 +658,9 @@ def run_digits_model(
             }
         )
         started = time.perf_counter()
-        evaluation = _evaluate_digits(learner, data.test_images, data.test_labels)
+        evaluation = _evaluate_digits_locked(
+            learner, data.test_images, data.test_labels
+        )
         evaluation_seconds += time.perf_counter() - started
         evaluation_history.append(
             {
@@ -644,6 +695,12 @@ def run_digits_model(
         "state_bytes_before": initial_state_bytes,
         "state_bytes_after": learner.state_nbytes,
         "bounded_state": initial_state_bytes == learner.state_nbytes,
+        "weights_locked_during_evaluation": all(
+            item["weights_unchanged"] for item in evaluation_history
+        ),
+        "transient_state_restored_after_evaluation": all(
+            item["transient_state_restored"] for item in evaluation_history
+        ),
     }
     if isinstance(learner, EligibilityReservoir):
         result["diagnostics"] = learner.diagnostics
@@ -654,6 +711,13 @@ def run_digits_experiment(config: DigitsExperimentConfig) -> dict[str, Any]:
     """Run matched shuffled and class-ordered 8x8 image benchmarks."""
 
     split = load_digits_split(test_per_class=config.test_per_class, seed=config.seed)
+    augmented_split = augment_digits_split(
+        split,
+        copies=config.augmentation_copies,
+        max_shift=config.augmentation_max_shift,
+        noise_std=config.augmentation_noise_std,
+        seed=config.seed + 3,
+    )
     kinds: tuple[DigitsKind, ...] = (
         "frozen",
         "lms",
@@ -669,14 +733,20 @@ def run_digits_experiment(config: DigitsExperimentConfig) -> dict[str, Any]:
             "image_shape": [8, 8],
             "classes": 10,
             "train_samples": len(split.train_labels),
+            "augmented_train_samples": len(augmented_split.train_labels),
             "test_samples": len(split.test_labels),
         },
         "protocols": {
             protocol: {
-                kind: run_digits_model(kind, protocol, config, split=split)
+                kind: run_digits_model(
+                    kind,
+                    protocol,
+                    config,
+                    split=augmented_split if protocol == "shuffled_augmented" else split,
+                )
                 for kind in kinds
             }
-            for protocol in ("shuffled", "class_ordered")
+            for protocol in ("shuffled", "shuffled_augmented", "class_ordered")
         },
     }
 
