@@ -280,6 +280,289 @@ class PrototypeReadout:
         return self.centroids.nbytes + self.counts.nbytes
 
 
+def _prediction_margin(scores: FloatArray) -> float:
+    """Return a scale-bounded gap between the largest two scores."""
+
+    if len(scores) < 2:
+        return 1.0
+    largest = np.partition(scores, -2)[-2:]
+    gap = float(largest[-1] - largest[-2])
+    return gap / (1.0 + abs(float(largest[-1])) + abs(float(largest[-2])))
+
+
+@dataclass
+class CumulativeMemoryReadout:
+    """Factor-free complementary memory with cumulative sufficient statistics.
+
+    The slow path is exact online ridge regression with unit weight for every
+    observation.  The fast path compresses recurring slow-path errors into one
+    prototype per (target class, mistaken class) pair.  A cumulative reliability
+    ranker observes both candidates and learns which one is more reliable.
+
+    No state is aged, decayed, replayed, or indexed by a history window.  The
+    model stores sufficient statistics and error representations rather than
+    raw observations.
+    """
+
+    input_size: int
+    output_size: int
+    seed: int = 0
+    regularization: float = 1.0
+    rank_bins: int = 16
+
+    def __post_init__(self) -> None:
+        if self.regularization <= 0.0:
+            raise ValueError("regularization must be positive")
+        if self.rank_bins <= 0:
+            raise ValueError("rank_bins must be positive")
+        self.slow_weights = np.zeros(
+            (self.output_size, self.input_size), dtype=np.float64
+        )
+        self.slow_inverse_correlation = (
+            np.eye(self.input_size, dtype=np.float64) / self.regularization
+        )
+        self.semantic_centroids = np.zeros(
+            (self.output_size, self.input_size), dtype=np.float64
+        )
+        self.semantic_counts = np.zeros(self.output_size, dtype=np.float64)
+
+        # A cell represents a recurring way in which target class i was
+        # mistaken for class j.  Counts make each centroid the exact cumulative
+        # mean of all errors assigned to that semantic cell.
+        self.exception_centroids = np.zeros(
+            (self.output_size, self.output_size, self.input_size),
+            dtype=np.float64,
+        )
+        self.exception_counts = np.zeros(
+            (self.output_size, self.output_size), dtype=np.float64
+        )
+
+        # The ranker records counterfactual correctness for both systems in a
+        # compact context table: slow class, fast class, slow-margin bin, and
+        # relative-proximity bin.  It defaults to the slow path until
+        # cumulative evidence favors fast memory in the same context.
+        rank_shape = (
+            self.output_size,
+            self.output_size,
+            self.rank_bins,
+            self.rank_bins,
+        )
+        self.rank_trials = np.zeros(rank_shape, dtype=np.float64)
+        self.rank_correct = np.zeros((2, *rank_shape), dtype=np.float64)
+        self.sample_count = np.zeros(1, dtype=np.float64)
+        self.rank_update_count = np.zeros(1, dtype=np.float64)
+        self.selection_counts = np.zeros(2, dtype=np.float64)
+
+        self._last_slow_prediction: FloatArray | None = None
+        self._last_fast_prediction: FloatArray | None = None
+        self._last_rank_cell: tuple[int, int, int, int] | None = None
+        self._last_fast_available = False
+        self._last_selection = 0
+
+    @property
+    def weights(self) -> FloatArray:
+        """Expose the semantic weights for generic readout inspection."""
+
+        return self.slow_weights
+
+    def _fast_candidate(
+        self, features: FloatArray
+    ) -> tuple[FloatArray, bool, float, float]:
+        active = self.exception_counts > 0.0
+        if not np.any(active):
+            return (
+                np.zeros(self.output_size, dtype=np.float64),
+                False,
+                0.0,
+                float("inf"),
+            )
+
+        class_distances = np.full(self.output_size, np.inf, dtype=np.float64)
+        for class_index in range(self.output_size):
+            class_active = active[class_index]
+            if not np.any(class_active):
+                continue
+            differences = (
+                self.exception_centroids[class_index, class_active] - features
+            )
+            class_distances[class_index] = float(
+                np.min(np.mean(np.square(differences), axis=1))
+            )
+
+        finite = np.isfinite(class_distances)
+        fast_class = int(np.argmin(class_distances))
+        prediction = np.zeros(self.output_size, dtype=np.float64)
+        prediction[fast_class] = 1.0
+        best_distance = float(class_distances[fast_class])
+        finite_distances = np.sort(class_distances[finite])
+        if len(finite_distances) < 2:
+            margin = 1.0 / (1.0 + best_distance)
+        else:
+            margin = float(
+                (finite_distances[1] - finite_distances[0])
+                / (1.0 + finite_distances[1] + finite_distances[0])
+            )
+        return prediction, True, margin, best_distance
+
+    def predict(self, features: FloatArray) -> FloatArray:
+        features = _validate_vector("features", features, self.input_size)
+        slow_prediction = self.slow_weights @ features
+        fast_prediction, fast_available, _fast_margin, fast_distance = (
+            self._fast_candidate(features)
+        )
+        slow_class = int(np.argmax(slow_prediction))
+        fast_class = int(np.argmax(fast_prediction)) if fast_available else slow_class
+        if self.semantic_counts[slow_class] > 0.0:
+            slow_distance = float(
+                np.mean(
+                    np.square(self.semantic_centroids[slow_class] - features)
+                )
+            )
+        else:
+            slow_distance = float("inf")
+        if np.isfinite(slow_distance) and np.isfinite(fast_distance):
+            relative_fast_proximity = slow_distance / (
+                np.finfo(float).eps + slow_distance + fast_distance
+            )
+        elif np.isfinite(fast_distance):
+            relative_fast_proximity = 1.0
+        else:
+            relative_fast_proximity = 0.0
+        slow_margin = _prediction_margin(slow_prediction)
+        slow_margin_bin = min(
+            int(np.clip(slow_margin, 0.0, 1.0) * self.rank_bins),
+            self.rank_bins - 1,
+        )
+        proximity_bin = min(
+            int(np.clip(relative_fast_proximity, 0.0, 1.0) * self.rank_bins),
+            self.rank_bins - 1,
+        )
+        rank_cell = (slow_class, fast_class, slow_margin_bin, proximity_bin)
+        disagreement = fast_available and slow_class != fast_class
+        trials = self.rank_trials[rank_cell]
+        selection = 0
+        if disagreement and relative_fast_proximity > 0.5 and trials > 0.0:
+            selection = int(
+                self.rank_correct[(1, *rank_cell)]
+                > self.rank_correct[(0, *rank_cell)]
+            )
+
+        self._last_slow_prediction = slow_prediction.copy()
+        self._last_fast_prediction = fast_prediction.copy()
+        self._last_rank_cell = rank_cell
+        self._last_fast_available = fast_available
+        self._last_selection = selection
+        return (fast_prediction if selection else slow_prediction).copy()
+
+    def update(
+        self,
+        features: FloatArray,
+        target: FloatArray,
+        prediction: FloatArray,
+    ) -> None:
+        features = _validate_vector("features", features, self.input_size)
+        target = _validate_vector("target", target, self.output_size)
+        _validate_vector("prediction", prediction, self.output_size)
+        if self._last_slow_prediction is None or self._last_rank_cell is None:
+            raise RuntimeError("predict must be called before update")
+
+        target_class = int(np.argmax(target))
+        slow_class = int(np.argmax(self._last_slow_prediction))
+
+        # Train the reliability ranker on both observable counterfactuals.
+        # Counts give every disagreement unit weight and never decay.
+        fast_class = (
+            int(np.argmax(self._last_fast_prediction))
+            if self._last_fast_prediction is not None
+            else slow_class
+        )
+        if self._last_fast_available and fast_class != slow_class:
+            rank_cell = self._last_rank_cell
+            self.rank_trials[rank_cell] += 1.0
+            self.rank_correct[(0, *rank_cell)] += float(slow_class == target_class)
+            self.rank_correct[(1, *rank_cell)] += float(fast_class == target_class)
+            self.rank_update_count[0] += 1.0
+
+        # The fast representation sees only the semantic system's residual
+        # cases, enforcing complementary rather than duplicate learning.
+        if slow_class != target_class:
+            count = self.exception_counts[target_class, slow_class] + 1.0
+            centroid = self.exception_centroids[target_class, slow_class]
+            centroid += (features - centroid) / count
+            self.exception_counts[target_class, slow_class] = count
+
+        semantic_count = self.semantic_counts[target_class] + 1.0
+        semantic_centroid = self.semantic_centroids[target_class]
+        semantic_centroid += (features - semantic_centroid) / semantic_count
+        self.semantic_counts[target_class] = semantic_count
+
+        # Exact recursive ridge update with an implicit observation weight of
+        # one.  Every sample remains in the cumulative least-squares objective.
+        projected = self.slow_inverse_correlation @ features
+        denominator = 1.0 + float(features @ projected)
+        gain = projected / denominator
+        self.slow_weights += np.outer(
+            target - self._last_slow_prediction, gain
+        )
+        self.slow_inverse_correlation -= np.outer(
+            gain, features @ self.slow_inverse_correlation
+        )
+        self.slow_inverse_correlation = 0.5 * (
+            self.slow_inverse_correlation + self.slow_inverse_correlation.T
+        )
+
+        self.sample_count[0] += 1.0
+        self.selection_counts[self._last_selection] += 1.0
+        self._last_slow_prediction = None
+        self._last_fast_prediction = None
+        self._last_rank_cell = None
+
+    @property
+    def diagnostics(self) -> dict[str, float | int]:
+        total_selections = float(np.sum(self.selection_counts))
+        return {
+            "samples_in_slow_statistics": int(self.sample_count[0]),
+            "stored_raw_samples": 0,
+            "active_exception_representations": int(
+                np.count_nonzero(self.exception_counts)
+            ),
+            "active_semantic_representations": int(
+                np.count_nonzero(self.semantic_counts)
+            ),
+            "errors_compressed_into_fast_memory": int(
+                np.sum(self.exception_counts)
+            ),
+            "rank_updates": int(self.rank_update_count[0]),
+            "slow_selection_rate": (
+                0.0
+                if total_selections == 0.0
+                else float(self.selection_counts[0] / total_selections)
+            ),
+            "fast_selection_rate": (
+                0.0
+                if total_selections == 0.0
+                else float(self.selection_counts[1] / total_selections)
+            ),
+        }
+
+    @property
+    def state_nbytes(self) -> int:
+        arrays = (
+            self.slow_weights,
+            self.slow_inverse_correlation,
+            self.semantic_centroids,
+            self.semantic_counts,
+            self.exception_centroids,
+            self.exception_counts,
+            self.rank_trials,
+            self.rank_correct,
+            self.sample_count,
+            self.rank_update_count,
+            self.selection_counts,
+        )
+        return sum(array.nbytes for array in arrays)
+
+
 @dataclass
 class ProtectedFastSlowReadout:
     """Fast decaying adapter over a non-overwriting prototype memory."""

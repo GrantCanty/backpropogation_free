@@ -19,6 +19,7 @@ from no_backprop.experiment import (
 from no_backprop.replication import ReplicationConfig, run_replication
 from no_backprop.plotting import load_result, plot_result
 from no_backprop.milestone6 import Milestone6Config, run_milestone6
+from no_backprop.factor_free import FactorFreeMemoryConfig, run_factor_free_memory
 from no_backprop.scaling import (
     BlankImageScalingConfig,
     FeatureWidthScalingConfig,
@@ -76,6 +77,16 @@ def build_parser() -> argparse.ArgumentParser:
         default=[1.0, 0.9999, 0.999, 0.99, 0.95],
     )
     memory.add_argument("--output", type=str)
+    cumulative_memory = subparsers.add_parser(
+        "cumulative-memory",
+        help="run factor-free cumulative fast/slow memory experiments",
+    )
+    cumulative_memory.add_argument("--hidden-size", type=int, default=64)
+    cumulative_memory.add_argument("--test-per-class", type=int, default=40)
+    cumulative_memory.add_argument("--regularization", type=float, default=1.0)
+    cumulative_memory.add_argument("--rank-bins", type=int, default=16)
+    cumulative_memory.add_argument("--seed", type=int, default=29)
+    cumulative_memory.add_argument("--output", type=str)
     scaling = subparsers.add_parser(
         "scale", help="run lazy image-stream and feature-width scaling benchmarks"
     )
@@ -176,6 +187,19 @@ def main(argv: list[str] | None = None) -> int:
                 seed=args.seed,
                 block_size=args.block_size,
                 forgetting_factors=tuple(args.forgetting_factors),
+            )
+        )
+        if args.output:
+            write_json_result(result, args.output)
+        print(json.dumps(result, indent=2, sort_keys=True))
+    elif args.command == "cumulative-memory":
+        result = run_factor_free_memory(
+            FactorFreeMemoryConfig(
+                hidden_size=args.hidden_size,
+                test_per_class=args.test_per_class,
+                regularization=args.regularization,
+                rank_bins=args.rank_bins,
+                seed=args.seed,
             )
         )
         if args.output:

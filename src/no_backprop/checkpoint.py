@@ -11,6 +11,7 @@ from no_backprop.eligibility import EligibilityReservoir
 from no_backprop.protocol import ProtocolError
 from no_backprop.readouts import (
     BlockRLSReadout,
+    CumulativeMemoryReadout,
     DiagonalRLSReadout,
     FastSlowLMSReadout,
     ProtectedFastSlowReadout,
@@ -39,7 +40,25 @@ def save_checkpoint(learner: OnlineReservoir, destination: str | Path) -> Path:
         "bias": learner.bias,
         "state": learner.state,
     }
-    if isinstance(learner.readout, FastSlowLMSReadout):
+    if isinstance(learner.readout, CumulativeMemoryReadout):
+        arrays.update(
+            {
+                "readout_slow_weights": learner.readout.slow_weights,
+                "readout_slow_inverse_correlation": (
+                    learner.readout.slow_inverse_correlation
+                ),
+                "readout_semantic_centroids": learner.readout.semantic_centroids,
+                "readout_semantic_counts": learner.readout.semantic_counts,
+                "readout_exception_centroids": learner.readout.exception_centroids,
+                "readout_exception_counts": learner.readout.exception_counts,
+                "readout_rank_trials": learner.readout.rank_trials,
+                "readout_rank_correct": learner.readout.rank_correct,
+                "readout_sample_count": learner.readout.sample_count,
+                "readout_rank_update_count": learner.readout.rank_update_count,
+                "readout_selection_counts": learner.readout.selection_counts,
+            }
+        )
+    elif isinstance(learner.readout, FastSlowLMSReadout):
         arrays["readout_slow_weights"] = learner.readout.slow_weights
         arrays["readout_fast_weights"] = learner.readout.fast_weights
     elif isinstance(learner.readout, ProtectedFastSlowReadout):
@@ -94,7 +113,26 @@ def restore_checkpoint(learner: OnlineReservoir, source: str | Path) -> None:
         )
         _copy_array(learner.bias, arrays["bias"], "bias")
         _copy_array(learner.state, arrays["state"], "state")
-        if isinstance(learner.readout, FastSlowLMSReadout):
+        if isinstance(learner.readout, CumulativeMemoryReadout):
+            cumulative_arrays = (
+                ("slow_weights", "readout_slow_weights"),
+                (
+                    "slow_inverse_correlation",
+                    "readout_slow_inverse_correlation",
+                ),
+                ("semantic_centroids", "readout_semantic_centroids"),
+                ("semantic_counts", "readout_semantic_counts"),
+                ("exception_centroids", "readout_exception_centroids"),
+                ("exception_counts", "readout_exception_counts"),
+                ("rank_trials", "readout_rank_trials"),
+                ("rank_correct", "readout_rank_correct"),
+                ("sample_count", "readout_sample_count"),
+                ("rank_update_count", "readout_rank_update_count"),
+                ("selection_counts", "readout_selection_counts"),
+            )
+            for attribute, name in cumulative_arrays:
+                _copy_array(getattr(learner.readout, attribute), arrays[name], name)
+        elif isinstance(learner.readout, FastSlowLMSReadout):
             _copy_array(
                 learner.readout.slow_weights,
                 arrays["readout_slow_weights"],

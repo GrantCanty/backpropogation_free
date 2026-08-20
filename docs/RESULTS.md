@@ -9,7 +9,7 @@ the implementations in this repository, not for general performance claims.
 
 ## Verification
 
-The complete suite contains 41 tests covering:
+The complete suite contains 46 tests covering:
 
 - strict predict-before-learn ordering
 - deterministic streams
@@ -25,6 +25,8 @@ The complete suite contains 41 tests covering:
   families
 - diagonal/block RLS updates, protected prototype state, and checkpoint recovery
 - lazy blank-image streams and analytic feature-width projections
+- exact equivalence between sequential cumulative memory and batch ridge
+- factor-free residual compression, locked evaluation, and checkpoint recovery
 
 Run it with:
 
@@ -301,6 +303,70 @@ per-event updates and a separately labeled batched-throughput mode.
 5. **Continual stability:** passed as a measured tradeoff; fast/slow weights
    improved retention with a small accuracy cost.
 
+## Factor-free cumulative representation memory
+
+The `memory` branch replaces age-based discounting with complementary
+representations:
+
+- The **slow representation** is exact cumulative ridge regression. Every
+  observation enters with weight one and remains in its sufficient statistics.
+- Per-class semantic centroids provide a second stable representation.
+- The **fast representation** receives only cases the slow path misclassifies,
+  enforcing specialization. Errors with the same target/predicted-class pair
+  are compressed into a cumulative centroid rather than retained as images.
+- A cumulative ranker records which path was correct in contexts defined by the
+  two proposed classes, slow confidence, and relative representational
+  proximity. Its counts never decay.
+
+The implementation contains no forgetting-factor or decay field and stores no
+raw samples. A mechanical test confirms that its sequential slow weights equal
+the closed-form batch ridge solution over all observations to numerical
+precision. With ten classes, 65 readout features, and 16 rank bins, its state is
+fixed at 731.8 KB regardless of stream length. The rank-resolution cost is
+large but depends on classes, features, and bins—not the number of examples.
+
+Results are means across seeds 7, 17, and 29:
+
+| Learner | Shuffled final | Ordered online | Ordered final | Ordered forgetting | State |
+|---|---:|---:|---:|---:|---:|
+| Cumulative fast/slow memory | 89.75% | **80.43%** | 86.08% | 0.086 | 731.8 KB |
+| RLS, no discount | **90.08%** | 77.00% | **90.08%** | **0.038** | 75.1 KB |
+| Class prototypes | 67.17% | 80.12% | 67.17% | 0.147 | 42.2 KB |
+| Prior protected fast/slow | 45.58% | 99.36% | 10.00% | 0.900 | 47.2 KB |
+
+Every cumulative-memory run incorporated all 1,397 training observations into
+the slow statistics and stored zero images. The shuffled stream created 53
+active error representations on average, compressing 203 slow errors. The
+ordered stream created 38 representations, compressing 321 errors. The ranker
+selected fast memory for 1.8% of shuffled and 4.2% of ordered training
+predictions.
+
+The fast path therefore produces a real but unresolved tradeoff. It improves
+immediate ordered-stream accuracy by 3.43 percentage points over its slow-path
+baseline, while reducing final held-out retention by 4.00 points. Finer rank
+contexts reduced the damage during development, but increased state and did not
+eliminate it. This makes routing—not cumulative storage—the next bottleneck.
+
+The original/inverted/original test supports the same conclusion:
+
+| Learner | After inversion: original | After inversion: inverted | Final original | Final inverted |
+|---|---:|---:|---:|---:|
+| Cumulative fast/slow memory | 82.75% | 78.58% | 87.08% | 73.83% |
+| RLS, no discount | **84.42%** | 78.58% | **87.75%** | **74.00%** |
+| RLS, factor 0.999 | 73.33% | **86.08%** | 89.33% | 68.00% |
+
+The discounted comparator adapts more aggressively by sacrificing the prior
+domain. The cumulative systems keep both domains useful. The new fast path does
+not yet improve on the no-discount slow baseline in this drift test, so the
+experiment establishes the architecture and invariant but not a quality win.
+
+Run one deterministic seed with:
+
+```bash
+PYTHONPATH=src python3 -m no_backprop cumulative-memory \
+  --output results/cumulative-memory.json
+```
+
 ## Limitations and next decision
 
 - All tasks are synthetic and small.
@@ -318,7 +384,13 @@ per-event updates and a separately labeled batched-throughput mode.
 - Blank-image scaling validates systems behavior, not accuracy or numerical
   behavior on a diverse 60,000-image stream.
 - CPU throughput does not establish energy or accelerator efficiency.
+- The first factor-free router uses a fixed-resolution cumulative context table;
+  it is factor-free but consumes about ten times the state of exact RLS here.
+- Fast-memory routing improves immediate ordered adaptation but still damages
+  final retention, and does not beat cumulative RLS on the drift benchmark.
 
-The next milestone should select exactly one local domain—streaming audio/sensor
-prediction, small control, or continual image classification—and define a
-domain-specific success threshold before adding any downloaded data.
+The next mechanism experiment should keep the exact cumulative slow invariant
+and replace the binned router with a representation-conditioned ranker that can
+generalize locally without allowing fast predictions to override stable regions.
+Only after it matches the slow baseline's retention should the project add
+learned or expanding encoders.

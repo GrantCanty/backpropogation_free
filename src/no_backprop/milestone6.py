@@ -32,6 +32,8 @@ class Milestone6Config:
     seed: int = 29
     block_size: int = 16
     augmentation_copies: int = 1
+    cumulative_regularization: float = 1.0
+    cumulative_rank_bins: int = 16
     forgetting_factors: tuple[float, ...] = (1.0, 0.9999, 0.999, 0.99, 0.95)
     kinds: tuple[DigitsKind, ...] = (
         "lms",
@@ -50,6 +52,8 @@ def _digits_config(config: Milestone6Config) -> DigitsExperimentConfig:
         seed=config.seed,
         block_size=config.block_size,
         augmentation_copies=config.augmentation_copies,
+        cumulative_regularization=config.cumulative_regularization,
+        cumulative_rank_bins=config.cumulative_rank_bins,
     )
 
 

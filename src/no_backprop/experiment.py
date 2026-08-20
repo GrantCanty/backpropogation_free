@@ -22,6 +22,7 @@ from no_backprop.digits import (
 from no_backprop.metrics import PrequentialMetrics
 from no_backprop.readouts import (
     BlockRLSReadout,
+    CumulativeMemoryReadout,
     DiagonalRLSReadout,
     FastSlowLMSReadout,
     FrozenReadout,
@@ -106,6 +107,8 @@ class DigitsExperimentConfig:
     surprise_threshold: float = 0.75
     fast_decay: float = 0.995
     consolidation_rate: float = 0.002
+    cumulative_regularization: float = 1.0
+    cumulative_rank_bins: int = 16
 
 
 def _process_rss_bytes() -> int | None:
@@ -421,6 +424,7 @@ DigitsKind = Literal[
     "protected",
     "eligibility",
     "fast_slow",
+    "cumulative_memory",
 ]
 
 
@@ -475,6 +479,14 @@ def build_digits_learner(
             seed=config.seed,
             fast_learning_rate=config.lms_learning_rate,
             fast_decay=config.fast_decay,
+        )
+    elif kind == "cumulative_memory":
+        readout = CumulativeMemoryReadout(
+            feature_size,
+            10,
+            seed=config.seed,
+            regularization=config.cumulative_regularization,
+            rank_bins=config.cumulative_rank_bins,
         )
     elif kind == "fast_slow":
         readout = FastSlowLMSReadout(
@@ -558,7 +570,23 @@ def _learner_training_arrays(learner: OnlineReservoir) -> tuple[np.ndarray, ...]
     """Return all arrays that evaluation must never modify."""
 
     arrays = [learner.input_weights, learner.recurrent_weights, learner.bias]
-    if isinstance(learner.readout, FastSlowLMSReadout):
+    if isinstance(learner.readout, CumulativeMemoryReadout):
+        arrays.extend(
+            [
+                learner.readout.slow_weights,
+                learner.readout.slow_inverse_correlation,
+                learner.readout.semantic_centroids,
+                learner.readout.semantic_counts,
+                learner.readout.exception_centroids,
+                learner.readout.exception_counts,
+                learner.readout.rank_trials,
+                learner.readout.rank_correct,
+                learner.readout.sample_count,
+                learner.readout.rank_update_count,
+                learner.readout.selection_counts,
+            ]
+        )
+    elif isinstance(learner.readout, FastSlowLMSReadout):
         arrays.extend(
             [learner.readout.slow_weights, learner.readout.fast_weights]
         )
@@ -757,6 +785,8 @@ def run_digits_model(
     }
     if isinstance(learner, EligibilityReservoir):
         result["diagnostics"] = learner.diagnostics
+    if isinstance(learner.readout, CumulativeMemoryReadout):
+        result["memory_diagnostics"] = learner.readout.diagnostics
     return result
 
 

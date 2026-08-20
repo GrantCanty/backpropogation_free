@@ -13,6 +13,8 @@ The experimental contract and milestone plan are in [PLAN.md](PLAN.md).
 - Strict `predict -> score -> learn` streaming protocol
 - Fixed recurrent reservoir with LMS and RLS online readouts
 - Diagonal/block RLS approximations and protected prototype memories
+- Factor-free cumulative slow memory, residual fast representations, and a
+  learned reliability ranker
 - Local recurrent and input eligibility traces with fixed random feedback
 - Surprise-gated recurrent plasticity
 - Fast/slow readout weights with gradual consolidation
@@ -38,6 +40,8 @@ PYTHONPATH=src python3 -m no_backprop delayed --output results/delayed.json
 PYTHONPATH=src python3 -m no_backprop continual --output results/continual.json
 PYTHONPATH=src python3 -m no_backprop digits --output results/digits.json
 PYTHONPATH=src python3 -m no_backprop memory --output results/milestone6.json
+PYTHONPATH=src python3 -m no_backprop cumulative-memory \
+  --output results/cumulative-memory.json
 PYTHONPATH=src python3 -m no_backprop scale --output results/scaling.json
 PYTHONPATH=src python3 -m no_backprop replicate --output results/replication.json
 
@@ -67,6 +71,12 @@ The scale command does not allocate a 60,000-image dataset. It reuses one blank
 image while executing the full predict/learn path, which isolates learner state
 and runtime scaling. Its 28x28 case matches Fashion-MNIST's image dimensions and
 60,000-example training-set length without downloading Fashion-MNIST.
+
+The cumulative-memory command tests the factor-free branch. Every labeled
+observation updates an exact cumulative ridge representation with unit weight;
+slow-path errors additionally update compact confusion representations. No raw
+image is retained, and no observation is aged out. A cumulative ranker compares
+slow and fast predictions using confidence and representational proximity.
 
 ## Architecture
 
@@ -104,6 +114,10 @@ The controlled MVP passes the five gates in `PLAN.md`:
 - exact RLS state is constant across 60,000 images, but its quadratic feature
   state grows from 38 KB at width 65 to 2.05 MB at width 513; block RLS reduces
   that width-513 state to 104 KB while retaining 86% shuffled-digit accuracy
+- the first factor-free fast/slow prototype proves exact cumulative inclusion
+  without raw-sample storage, but currently trades about 3.4 points of better
+  ordered-stream online accuracy for about 4.0 points of final retention versus
+  its cumulative RLS slow-path baseline
 
 These results validate the experimental machinery and the narrow MVP
 hypotheses. They do **not** establish an advantage on real-world data or prove
@@ -112,8 +126,8 @@ that local learning generally outperforms backpropagation. See
 
 ## Roadmap
 
-Milestone 6 focuses on scalable continual memory, forgetting-factor behavior,
-and concept drift. The later Milestone 7 will investigate JEPA-inspired
-predictive representations trained with forward-only local updates. It is not a
-reimplementation of I-JEPA: no automatic differentiation or backward pass will
-enter the core learner.
+The `memory` branch now tests factor-free complementary representations. The
+next mechanism problem is improving the learned fast/slow router without
+discounting historical evidence. JEPA-inspired predictive representations
+remain a later experiment; they are not an I-JEPA reimplementation, and no
+automatic differentiation or backward pass enters the core learner.
