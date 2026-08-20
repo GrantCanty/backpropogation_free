@@ -26,6 +26,7 @@ from no_backprop.readouts import (
     CumulativeMaturityReadout,
     DiagonalRLSReadout,
     FastSlowLMSReadout,
+    FastSlowValueProbationaryReadout,
     FrozenReadout,
     KeyValueMaturityReadout,
     LMSReadout,
@@ -448,6 +449,8 @@ DigitsKind = Literal[
     "probation_managed32",
     "probation_managed16",
     "probation_managed8",
+    "managed16_fast_values",
+    "managed16_fast_slow_values",
     "key_value",
     "key_value_entropy",
 ]
@@ -579,6 +582,18 @@ def build_digits_learner(
             rbf_width=config.maturity_rbf_width,
             min_center_distance=config.maturity_min_center_distance,
             max_candidates=candidate_capacity,
+        )
+    elif kind in ("managed16_fast_values", "managed16_fast_slow_values"):
+        readout = FastSlowValueProbationaryReadout(
+            feature_size,
+            10,
+            seed=config.seed,
+            regularization=config.cumulative_regularization,
+            max_neurons=config.maturity_max_neurons,
+            rbf_width=config.maturity_rbf_width,
+            min_center_distance=config.maturity_min_center_distance,
+            max_candidates=16,
+            consolidate_values=kind == "managed16_fast_slow_values",
         )
     elif kind in ("key_value", "key_value_entropy"):
         readout = KeyValueMaturityReadout(
@@ -732,6 +747,17 @@ def _learner_training_arrays(learner: OnlineReservoir) -> tuple[np.ndarray, ...]
                     learner.readout.candidate_novelty,
                     learner.readout.resolved_candidate_reclaims,
                     learner.readout.novelty_candidate_replacements,
+                ]
+            )
+        if isinstance(learner.readout, FastSlowValueProbationaryReadout):
+            arrays.extend(
+                [
+                    learner.readout.fast_values,
+                    learner.readout.fast_inverse_correlation,
+                    learner.readout.next_consolidation_evidence,
+                    learner.readout.value_consolidation_counts,
+                    learner.readout.fast_update_count,
+                    learner.readout.maximum_consolidation_shift,
                 ]
             )
     elif isinstance(learner.readout, CumulativeMemoryReadout):

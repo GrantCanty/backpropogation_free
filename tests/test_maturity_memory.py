@@ -12,6 +12,7 @@ from no_backprop.experiment import (
 )
 from no_backprop.readouts import (
     CumulativeMaturityReadout,
+    FastSlowValueProbationaryReadout,
     KeyValueMaturityReadout,
     ManagedProbationaryMaturityReadout,
     ProbationaryMaturityReadout,
@@ -49,6 +50,7 @@ def test_maturity_without_neurons_matches_batch_ridge() -> None:
 def test_maturity_models_have_no_forgetting_or_decay_parameter() -> None:
     for readout_class in (
         CumulativeMaturityReadout,
+        FastSlowValueProbationaryReadout,
         KeyValueMaturityReadout,
         ManagedProbationaryMaturityReadout,
         ProbationaryMaturityReadout,
@@ -218,6 +220,33 @@ def test_managed_candidates_prefer_less_novel_proposals() -> None:
     np.testing.assert_array_equal(readout.candidate_centers[0], [-1.0])
 
 
+def test_fast_value_consolidation_preserves_prediction_exactly() -> None:
+    readout = FastSlowValueProbationaryReadout(
+        1, 2, max_neurons=1, max_candidates=1
+    )
+    CumulativeMaturityReadout._recruit(
+        readout, np.array([0.0]), target_class=0
+    )
+    readout.expanded_weights[:, 1] = np.array([1.0, 2.0])
+    readout.fast_values[:, 0] = np.array([3.0, 4.0])
+    readout.next_consolidation_evidence[0] = 0.0
+    features = np.array([0.0])
+    expanded = readout._expanded_features(features)
+    expected = readout._prediction_from_expanded(expanded).copy()
+    readout._last_expanded = expanded
+    readout._pending_fast_target = expected.copy()
+
+    readout._update_neuron_statistics(
+        features, expanded[readout.input_size :], active_before_update=1
+    )
+
+    actual = readout._prediction_from_expanded(expanded)
+    np.testing.assert_allclose(actual, expected)
+    np.testing.assert_array_equal(readout.fast_values[:, 0], 0.0)
+    assert readout.diagnostics["value_consolidations"] == 1
+    assert readout.diagnostics["maximum_consolidation_prediction_shift"] == 0.0
+
+
 def test_recruited_neuron_accumulates_maturity_evidence() -> None:
     readout = CumulativeMaturityReadout(
         2, 2, max_neurons=2, min_center_distance=0.01
@@ -254,6 +283,8 @@ def test_maturity_variants_run_locked_with_bounded_capacity() -> None:
         "probation_managed32",
         "probation_managed16",
         "probation_managed8",
+        "managed16_fast_values",
+        "managed16_fast_slow_values",
         "key_value",
         "key_value_entropy",
     ):
@@ -428,3 +459,24 @@ def test_managed_candidate_capacity_is_bounded_and_checkpointed(tmp_path) -> Non
     restored = build_digits_learner("probation_managed8", config)
     restore_checkpoint(restored, path)
     assert restored.readout.diagnostics == small.readout.diagnostics
+
+
+def test_fast_slow_value_checkpoint_round_trip(tmp_path) -> None:
+    config = DigitsExperimentConfig(
+        hidden_size=8, seed=43, maturity_max_neurons=4
+    )
+    learner = build_digits_learner("managed16_fast_slow_values", config)
+    rng = np.random.default_rng(43)
+    for label in (7, 0, 7, 2, 0, 2):
+        _process_digit_image(
+            learner, rng.uniform(size=(8, 8)), target=_digit_target(label)
+        )
+    path = save_checkpoint(learner, tmp_path / "fast-slow-values.npz")
+    evaluation_image = rng.uniform(size=(8, 8))
+    expected = _process_digit_image(learner, evaluation_image, target=None)
+
+    restored = build_digits_learner("managed16_fast_slow_values", config)
+    restore_checkpoint(restored, path)
+    actual = _process_digit_image(restored, evaluation_image, target=None)
+    np.testing.assert_allclose(actual, expected)
+    assert restored.readout.diagnostics == learner.readout.diagnostics

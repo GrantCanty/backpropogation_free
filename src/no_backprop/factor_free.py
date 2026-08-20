@@ -44,6 +44,8 @@ class FactorFreeMemoryConfig:
         "probation_managed32",
         "probation_managed16",
         "probation_managed8",
+        "managed16_fast_values",
+        "managed16_fast_slow_values",
         "key_value",
         "key_value_entropy",
         "rls",
@@ -116,6 +118,12 @@ def run_factor_free_drift(config: FactorFreeMemoryConfig) -> dict[str, Any]:
             "probation_managed16": run_drift_model(
                 "probation_managed16", milestone_config
             ),
+            "managed16_fast_values": run_drift_model(
+                "managed16_fast_values", milestone_config
+            ),
+            "managed16_fast_slow_values": run_drift_model(
+                "managed16_fast_slow_values", milestone_config
+            ),
             "key_value": run_drift_model("key_value", milestone_config),
             "key_value_entropy": run_drift_model(
                 "key_value_entropy", milestone_config
@@ -173,7 +181,15 @@ def run_factor_free_memory(
             "probation_managed32",
             "probation_managed16",
             "probation_managed8",
+            "managed16_fast_values",
+            "managed16_fast_slow_values",
         )
+    ]
+    consolidated_value_runs = [
+        model
+        for models in quality.values()
+        for kind, model in models.items()
+        if kind == "managed16_fast_slow_values"
     ]
     return {
         "experiment": "factor_free_cumulative_representation_memory",
@@ -206,6 +222,13 @@ def run_factor_free_memory(
             "probation_active_keys_are_frozen": all(
                 run["maturity_diagnostics"]["active_keys_are_frozen"]
                 for run in probation_runs
+            ),
+            "value_consolidation_preserves_predictions": all(
+                run["maturity_diagnostics"][
+                    "maximum_consolidation_prediction_shift"
+                ]
+                == 0.0
+                for run in consolidated_value_runs
             ),
         },
         "quality": quality,

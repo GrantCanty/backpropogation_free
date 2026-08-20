@@ -587,6 +587,54 @@ On the 10-seed drift benchmark, managed-16 changes final original accuracy by
 zero. Managed-16 therefore advances as the bounded candidate foundation for
 the fast/slow-value experiment.
 
+### Evidence-consolidated fast/slow values
+
+Each confirmed key receives an optional fast output column in addition to its
+ordinary cumulative RLS slow column. The prediction uses their sum, so there is
+one path and no fast/slow router. Per-key scalar RLS state updates the fast
+column from the residual left after the slow update; there is no learning-rate
+parameter or decay.
+
+In the consolidated variant, a key transfers its entire fast column into its
+slow column whenever cumulative activation evidence doubles. The fast column is
+then cleared and its scalar inverse correlation reset. Because the transfer is
+
+\[
+v_j^{slow} \leftarrow v_j^{slow}+v_j^{fast}, \qquad
+v_j^{fast} \leftarrow 0,
+\]
+
+the total value and every prediction are exactly unchanged at consolidation.
+All tests and experiment diagnostics report zero numerical prediction shift.
+The non-consolidating fast-value model is the matched ablation.
+
+Ten-seed results are:
+
+| Value rule | Shuffled online | Shuffled final | Ordered online | Ordered final | Ordered forgetting | State |
+|---|---:|---:|---:|---:|---:|---:|
+| Managed-16 slow only | **85.75%** | **91.08%** | 77.72% | **90.58%** | **3.98 points** | 144.1 KB |
+| + fast values | 85.58% | 90.73% | 79.52% | 88.70% | 6.80 points | 147.4 KB |
+| + fast values and consolidation | 85.52% | 90.70% | **79.93%** | 87.30% | 8.28 points | 147.4 KB |
+
+Fast values produce the intended plasticity but fail the stability gate. Against
+slow-only, fast values gain 1.80 ordered-online points with a paired 95%
+half-width of 0.71, but lose 1.88 final points with half-width 1.77 and add 2.83
+forgetting points. Shuffled final also falls 0.35 points. State rises 2.3% and
+training time rises roughly 9–13%.
+
+Consolidation adds another 0.41 ordered-online points over fast-only, but loses
+another 1.40 final points and adds 1.48 forgetting points; each paired interval
+excludes zero. Although transfer itself is lossless, resetting local inverse
+correlation makes subsequent residual updates aggressive again. Exact
+consolidation therefore preserves current information but changes future
+plasticity in a destabilizing way.
+
+On drift, fast and consolidated models retain 0.78 and 0.83 fewer original
+points immediately after inversion, while inverted accuracy changes by only
+-0.30 and -0.35 points. Their larger recovery reflects having more to recover;
+final original and inverted metrics match slow-only within uncertainty. Neither
+fast-value variant advances to scaling, but both remain reproducible controls.
+
 ### Adaptive key-value neuron experiment
 
 The attention-inspired variant keeps the same single output path but makes each
@@ -682,6 +730,9 @@ calibrate predictive uncertainty, and scale the neuron bank.
   reducing exact-RLS work, while normalization causes severe ordered forgetting.
 - Evidence-managed 16-slot probation reduces candidate state and rejection with
   matched quality; an 8-slot bank prevents enough shuffled keys from maturing.
+- Fast values increase immediate ordered plasticity but significantly worsen
+  retention; evidence-doubling consolidation is algebraically lossless yet
+  further destabilizes subsequent learning.
 - Adaptive keys introduce nonlinear basis drift, add 24% state and about 6%
   NumPy CPU time, and have only a small three-seed adaptation gain.
 - Past observations have no counterfactual activations for neurons recruited
@@ -689,5 +740,5 @@ calibrate predictive uncertainty, and scale the neuron bank.
   replay, but does not provide a formal non-interference guarantee.
 
 The next mechanism experiment should keep the cumulative single-path invariant
-while testing evidence-consolidated fast/slow values without decay or routing.
-A capacity-width scaling study should precede learned or expanding encoders.
+while scaling managed-16 capacity, feature width, and generated image streams.
+Learned or expanding encoders remain later work.

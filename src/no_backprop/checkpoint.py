@@ -15,6 +15,7 @@ from no_backprop.readouts import (
     CumulativeMaturityReadout,
     DiagonalRLSReadout,
     FastSlowLMSReadout,
+    FastSlowValueProbationaryReadout,
     KeyValueMaturityReadout,
     ManagedProbationaryMaturityReadout,
     ProbationaryMaturityReadout,
@@ -108,6 +109,19 @@ def save_checkpoint(learner: OnlineReservoir, destination: str | Path) -> Path:
             arrays["readout_novelty_candidate_replacements"] = (
                 learner.readout.novelty_candidate_replacements
             )
+        if isinstance(learner.readout, FastSlowValueProbationaryReadout):
+            fast_slow_names = (
+                "fast_values",
+                "fast_inverse_correlation",
+                "next_consolidation_evidence",
+                "value_consolidation_counts",
+                "fast_update_count",
+                "maximum_consolidation_shift",
+            )
+            for name in fast_slow_names:
+                arrays[f"readout_fast_slow_{name}"] = getattr(
+                    learner.readout, name
+                )
     elif isinstance(learner.readout, CumulativeMemoryReadout):
         arrays.update(
             {
@@ -263,6 +277,22 @@ def restore_checkpoint(learner: OnlineReservoir, source: str | Path) -> None:
                     arrays["readout_novelty_candidate_replacements"],
                     "readout_novelty_candidate_replacements",
                 )
+            if isinstance(learner.readout, FastSlowValueProbationaryReadout):
+                fast_slow_names = (
+                    "fast_values",
+                    "fast_inverse_correlation",
+                    "next_consolidation_evidence",
+                    "value_consolidation_counts",
+                    "fast_update_count",
+                    "maximum_consolidation_shift",
+                )
+                for name in fast_slow_names:
+                    checkpoint_name = f"readout_fast_slow_{name}"
+                    _copy_array(
+                        getattr(learner.readout, name),
+                        arrays[checkpoint_name],
+                        checkpoint_name,
+                    )
         elif isinstance(learner.readout, CumulativeMemoryReadout):
             cumulative_arrays = (
                 ("slow_weights", "readout_slow_weights"),

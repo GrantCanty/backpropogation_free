@@ -11,4 +11,4 @@ The factor-free complementary-memory defaults are in
 RLS-leverage-gated controls, probationary frozen keys, and adaptive key-value
 maturity variants. It also includes dense, top-k, winner-only, and normalized
 local-responsibility controls plus evidence-managed 32/16/8-slot candidate
-pools.
+pools and fast-value/consolidated-fast-slow value ablations.

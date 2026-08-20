@@ -670,10 +670,13 @@ class CumulativeMaturityReadout:
     def _expanded_features(self, features: FloatArray) -> FloatArray:
         return np.concatenate((features, self._activities(features)))
 
+    def _prediction_from_expanded(self, expanded: FloatArray) -> FloatArray:
+        return self.expanded_weights @ expanded
+
     def predict(self, features: FloatArray) -> FloatArray:
         features = _validate_vector("features", features, self.input_size)
         expanded = self._expanded_features(features)
-        prediction = self.expanded_weights @ expanded
+        prediction = self._prediction_from_expanded(expanded)
         self._last_features = features.copy()
         self._last_expanded = expanded
         self._last_prediction = prediction.copy()
@@ -720,7 +723,11 @@ class CumulativeMaturityReadout:
         self.neuron_labels[index] = float(target_class)
         self.neuron_recruitment_entropy[index] = self._last_entropy
         self.active_count[0] += 1.0
+        self._on_neuron_activated(index)
         return True
+
+    def _on_neuron_activated(self, index: int) -> None:
+        """Initialize subclass state for a newly exposed local coordinate."""
 
     def _prepare_representation_update(
         self, features: FloatArray, target_class: int
@@ -779,7 +786,7 @@ class CumulativeMaturityReadout:
                 self.proximity_rejection_count[0] += 1.0
 
         expanded = self._last_expanded
-        prediction_for_update = self.expanded_weights @ expanded
+        prediction_for_update = self._prediction_from_expanded(expanded)
         denominator = 1.0 + float(expanded @ projected)
         gain = projected / denominator
         self.expanded_weights += np.outer(target - prediction_for_update, gain)
@@ -1101,7 +1108,7 @@ class ManagedProbationaryMaturityReadout(ProbationaryMaturityReadout):
 
     def _candidate_prediction(self, index: int) -> FloatArray:
         expanded = self._expanded_features(self.candidate_centers[index])
-        return self.expanded_weights @ expanded
+        return self._prediction_from_expanded(expanded)
 
     def _managed_candidate_slot(self) -> int | None:
         available = self._empty_candidate_slot()
@@ -1183,6 +1190,168 @@ class ManagedProbationaryMaturityReadout(ProbationaryMaturityReadout):
                 self.candidate_novelty,
                 self.resolved_candidate_reclaims,
                 self.novelty_candidate_replacements,
+            )
+        )
+
+
+@dataclass
+class FastSlowValueProbationaryReadout(ManagedProbationaryMaturityReadout):
+    """Managed frozen keys with residual fast values and exact consolidation.
+
+    Slow values receive the ordinary cumulative RLS update.  Independent
+    scalar RLS state gives each active key a fast residual value.  When a key's
+    cumulative activation evidence doubles, its fast column is added to the
+    slow column and cleared; their sum, and therefore every prediction, is
+    unchanged at the transfer instant.
+    """
+
+    consolidate_values: bool = True
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        self.fast_values = np.zeros(
+            (self.output_size, self.max_neurons), dtype=np.float64
+        )
+        self.fast_inverse_correlation = np.full(
+            self.max_neurons,
+            1.0 / self.regularization,
+            dtype=np.float64,
+        )
+        self.next_consolidation_evidence = np.full(
+            self.max_neurons, np.inf, dtype=np.float64
+        )
+        self.value_consolidation_counts = np.zeros(
+            self.max_neurons, dtype=np.float64
+        )
+        self.fast_update_count = np.zeros(1, dtype=np.float64)
+        self.maximum_consolidation_shift = np.zeros(1, dtype=np.float64)
+        self._pending_fast_target: FloatArray | None = None
+
+    def _on_neuron_activated(self, index: int) -> None:
+        self.fast_values[:, index].fill(0.0)
+        self.fast_inverse_correlation[index] = 1.0 / self.regularization
+        self.next_consolidation_evidence[index] = (
+            2.0 if self.consolidate_values else np.inf
+        )
+        self.value_consolidation_counts[index] = 0.0
+
+    def _prediction_from_expanded(self, expanded: FloatArray) -> FloatArray:
+        prediction = super()._prediction_from_expanded(expanded)
+        if self.max_neurons:
+            prediction = prediction + self.fast_values @ expanded[self.input_size :]
+        return prediction
+
+    def update(
+        self,
+        features: FloatArray,
+        target: FloatArray,
+        prediction: FloatArray,
+    ) -> None:
+        self._pending_fast_target = np.asarray(target, dtype=np.float64).copy()
+        try:
+            super().update(features, target, prediction)
+        finally:
+            self._pending_fast_target = None
+
+    def _update_neuron_statistics(
+        self,
+        features: FloatArray,
+        activities: FloatArray,
+        active_before_update: int,
+    ) -> None:
+        super()._update_neuron_statistics(
+            features, activities, active_before_update
+        )
+        count = int(self.active_count[0])
+        if count == 0 or self._pending_fast_target is None:
+            return
+
+        expanded = self._last_expanded
+        if expanded is None:
+            raise RuntimeError("expanded features unavailable during fast update")
+        residual = self._pending_fast_target - self._prediction_from_expanded(
+            expanded
+        )
+        local_activities = activities[:count]
+        inverse = self.fast_inverse_correlation[:count]
+        denominator = 1.0 + inverse * np.square(local_activities)
+        gain = inverse * local_activities / denominator
+        self.fast_values[:, :count] += np.outer(residual, gain)
+        inverse -= gain * local_activities * inverse
+        self.fast_inverse_correlation[:count] = np.maximum(
+            inverse, np.finfo(float).tiny
+        )
+        if np.any(local_activities > np.finfo(float).tiny):
+            self.fast_update_count[0] += 1.0
+
+        if not self.consolidate_values:
+            return
+        ready = np.flatnonzero(
+            self.neuron_evidence[:count]
+            >= self.next_consolidation_evidence[:count]
+        )
+        for index in ready:
+            index = int(index)
+            slow_column = self.expanded_weights[:, self.input_size + index]
+            total_before = slow_column + self.fast_values[:, index]
+            slow_column += self.fast_values[:, index]
+            self.fast_values[:, index].fill(0.0)
+            total_after = slow_column + self.fast_values[:, index]
+            shift = float(np.max(np.abs(total_after - total_before)))
+            self.maximum_consolidation_shift[0] = max(
+                self.maximum_consolidation_shift[0], shift
+            )
+            self.fast_inverse_correlation[index] = 1.0 / self.regularization
+            self.next_consolidation_evidence[index] *= 2.0
+            self.value_consolidation_counts[index] += 1.0
+
+    @property
+    def diagnostics(self) -> dict[str, float | int | bool]:
+        result = super().diagnostics
+        count = int(self.active_count[0])
+        slow_values = self.expanded_weights[
+            :, self.input_size : self.input_size + count
+        ]
+        result.update(
+            {
+                "fast_slow_values": True,
+                "evidence_consolidation": self.consolidate_values,
+                "fast_value_updates": int(self.fast_update_count[0]),
+                "value_consolidations": int(
+                    np.sum(self.value_consolidation_counts)
+                ),
+                "mean_slow_value_norm": (
+                    0.0
+                    if count == 0
+                    else float(np.mean(np.linalg.norm(slow_values, axis=0)))
+                ),
+                "mean_fast_value_norm": (
+                    0.0
+                    if count == 0
+                    else float(
+                        np.mean(
+                            np.linalg.norm(self.fast_values[:, :count], axis=0)
+                        )
+                    )
+                ),
+                "maximum_consolidation_prediction_shift": float(
+                    self.maximum_consolidation_shift[0]
+                ),
+            }
+        )
+        return result
+
+    @property
+    def state_nbytes(self) -> int:
+        return super().state_nbytes + sum(
+            array.nbytes
+            for array in (
+                self.fast_values,
+                self.fast_inverse_correlation,
+                self.next_consolidation_evidence,
+                self.value_consolidation_counts,
+                self.fast_update_count,
+                self.maximum_consolidation_shift,
             )
         )
 
