@@ -9,7 +9,14 @@ import numpy as np
 
 from no_backprop.eligibility import EligibilityReservoir
 from no_backprop.protocol import ProtocolError
-from no_backprop.readouts import FastSlowLMSReadout, RLSReadout
+from no_backprop.readouts import (
+    BlockRLSReadout,
+    DiagonalRLSReadout,
+    FastSlowLMSReadout,
+    ProtectedFastSlowReadout,
+    PrototypeReadout,
+    RLSReadout,
+)
 from no_backprop.reservoir import OnlineReservoir
 
 
@@ -35,10 +42,26 @@ def save_checkpoint(learner: OnlineReservoir, destination: str | Path) -> Path:
     if isinstance(learner.readout, FastSlowLMSReadout):
         arrays["readout_slow_weights"] = learner.readout.slow_weights
         arrays["readout_fast_weights"] = learner.readout.fast_weights
+    elif isinstance(learner.readout, ProtectedFastSlowReadout):
+        arrays["readout_slow_centroids"] = learner.readout.slow_memory.centroids
+        arrays["readout_slow_counts"] = learner.readout.slow_memory.counts
+        arrays["readout_fast_weights"] = learner.readout.fast_weights
+    elif isinstance(learner.readout, PrototypeReadout):
+        arrays["readout_centroids"] = learner.readout.centroids
+        arrays["readout_counts"] = learner.readout.counts
     else:
         arrays["readout_weights"] = learner.readout.weights
     if isinstance(learner.readout, RLSReadout):
         arrays["readout_inverse_correlation"] = learner.readout.inverse_correlation
+    elif isinstance(learner.readout, DiagonalRLSReadout):
+        arrays["readout_inverse_diagonal"] = learner.readout.inverse_diagonal
+    elif isinstance(learner.readout, BlockRLSReadout):
+        arrays.update(
+            {
+                f"readout_inverse_block_{index}": block
+                for index, block in enumerate(learner.readout.inverse_blocks)
+            }
+        )
     if isinstance(learner, EligibilityReservoir):
         arrays.update(
             {
@@ -82,6 +105,33 @@ def restore_checkpoint(learner: OnlineReservoir, source: str | Path) -> None:
                 arrays["readout_fast_weights"],
                 "readout_fast_weights",
             )
+        elif isinstance(learner.readout, ProtectedFastSlowReadout):
+            _copy_array(
+                learner.readout.slow_memory.centroids,
+                arrays["readout_slow_centroids"],
+                "readout_slow_centroids",
+            )
+            _copy_array(
+                learner.readout.slow_memory.counts,
+                arrays["readout_slow_counts"],
+                "readout_slow_counts",
+            )
+            _copy_array(
+                learner.readout.fast_weights,
+                arrays["readout_fast_weights"],
+                "readout_fast_weights",
+            )
+        elif isinstance(learner.readout, PrototypeReadout):
+            _copy_array(
+                learner.readout.centroids,
+                arrays["readout_centroids"],
+                "readout_centroids",
+            )
+            _copy_array(
+                learner.readout.counts,
+                arrays["readout_counts"],
+                "readout_counts",
+            )
         else:
             _copy_array(
                 learner.readout.weights, arrays["readout_weights"], "readout_weights"
@@ -92,6 +142,16 @@ def restore_checkpoint(learner: OnlineReservoir, source: str | Path) -> None:
                 arrays["readout_inverse_correlation"],
                 "readout_inverse_correlation",
             )
+        elif isinstance(learner.readout, DiagonalRLSReadout):
+            _copy_array(
+                learner.readout.inverse_diagonal,
+                arrays["readout_inverse_diagonal"],
+                "readout_inverse_diagonal",
+            )
+        elif isinstance(learner.readout, BlockRLSReadout):
+            for index, block in enumerate(learner.readout.inverse_blocks):
+                name = f"readout_inverse_block_{index}"
+                _copy_array(block, arrays[name], name)
         if isinstance(learner, EligibilityReservoir):
             _copy_array(
                 learner.recurrent_eligibility,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import Any
 
 from baselines.bptt import BPTTConfig, run_bptt_signal
@@ -99,7 +99,34 @@ def run_digits_systems_comparison(
         seed=config.seed,
         learning_rate=config.bptt_learning_rate,
     )
-    kinds = ("lms", "rls", "eligibility", "fast_slow")
+    repeated_local_config = replace(
+        local_config,
+        passes=config.passes * (1 + config.augmentation_copies),
+    )
+    repeated_bptt_config = replace(
+        bptt_config,
+        passes=config.passes * (1 + config.augmentation_copies),
+    )
+    kinds = (
+        "lms",
+        "rls",
+        "diagonal_rls",
+        "block_rls",
+        "prototype",
+        "protected",
+        "eligibility",
+        "fast_slow",
+    )
+    protocol_specs = (
+        ("shuffled", split, local_config, bptt_config),
+        (
+            "shuffled_repeated",
+            split,
+            repeated_local_config,
+            repeated_bptt_config,
+        ),
+        ("shuffled_augmented", augmented, local_config, bptt_config),
+    )
     return {
         "experiment": "digits_shuffled_systems_comparison",
         "config": asdict(config),
@@ -112,17 +139,21 @@ def run_digits_systems_comparison(
             protocol: {
                 "local": {
                     kind: run_digits_model(
-                        kind, protocol, local_config, split=protocol_split
+                        kind, protocol, protocol_local_config, split=protocol_split
                     )
                     for kind in kinds
                 },
                 "bptt": run_bptt_digits(
-                    bptt_config, protocol=protocol, split=protocol_split
+                    protocol_bptt_config,
+                    protocol=protocol,
+                    split=protocol_split,
                 ),
             }
-            for protocol, protocol_split in (
-                ("shuffled", split),
-                ("shuffled_augmented", augmented),
-            )
+            for (
+                protocol,
+                protocol_split,
+                protocol_local_config,
+                protocol_bptt_config,
+            ) in protocol_specs
         },
     }

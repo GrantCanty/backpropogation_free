@@ -8,7 +8,12 @@ from typing import Literal
 import numpy as np
 
 
-DigitsProtocol = Literal["shuffled", "shuffled_augmented", "class_ordered"]
+DigitsProtocol = Literal[
+    "shuffled",
+    "shuffled_repeated",
+    "shuffled_augmented",
+    "class_ordered",
+]
 
 
 @dataclass(frozen=True)
@@ -140,7 +145,12 @@ def build_digits_segments(
     labels = np.asarray(labels, dtype=np.int64)
     if labels.ndim != 1 or len(labels) == 0:
         raise ValueError("labels must be a non-empty vector")
-    if protocol not in ("shuffled", "shuffled_augmented", "class_ordered"):
+    if protocol not in (
+        "shuffled",
+        "shuffled_repeated",
+        "shuffled_augmented",
+        "class_ordered",
+    ):
         raise ValueError(f"unknown digits protocol: {protocol}")
     if passes <= 0:
         raise ValueError("passes must be positive")
@@ -150,7 +160,7 @@ def build_digits_segments(
     segments: list[DigitsSegment] = []
     segment_index = 0
     for pass_index in range(passes):
-        if protocol in ("shuffled", "shuffled_augmented"):
+        if protocol in ("shuffled", "shuffled_repeated", "shuffled_augmented"):
             chunks = np.array_split(rng.permutation(len(labels)), len(classes))
             pass_segments = [(None, chunk) for chunk in chunks]
         else:

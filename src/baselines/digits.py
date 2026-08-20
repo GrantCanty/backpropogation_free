@@ -123,7 +123,11 @@ def run_bptt_digits(
 ) -> dict[str, Any]:
     """Train with one Adam/BPTT update per image on a shuffled stream."""
 
-    if protocol not in ("shuffled", "shuffled_augmented"):
+    if protocol not in (
+        "shuffled",
+        "shuffled_repeated",
+        "shuffled_augmented",
+    ):
         raise ValueError("the traditional baseline only supports shuffled protocols")
     torch.manual_seed(config.seed)
     torch.set_num_threads(1)

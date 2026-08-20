@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any, Literal
 
@@ -21,9 +21,13 @@ from no_backprop.digits import (
 )
 from no_backprop.metrics import PrequentialMetrics
 from no_backprop.readouts import (
+    BlockRLSReadout,
+    DiagonalRLSReadout,
     FastSlowLMSReadout,
     FrozenReadout,
     LMSReadout,
+    ProtectedFastSlowReadout,
+    PrototypeReadout,
     RLSReadout,
 )
 from no_backprop.reservoir import OnlineReservoir, ReservoirConfig
@@ -96,6 +100,7 @@ class DigitsExperimentConfig:
     lms_learning_rate: float = 0.18
     rls_regularization: float = 1.0
     rls_forgetting_factor: float = 0.999
+    block_size: int = 16
     recurrent_learning_rate: float = 5e-5
     trace_decay: float = 0.88
     surprise_threshold: float = 0.75
@@ -406,7 +411,17 @@ def run_continual_experiment(config: ContinualExperimentConfig) -> dict[str, Any
     }
 
 
-DigitsKind = Literal["frozen", "lms", "rls", "eligibility", "fast_slow"]
+DigitsKind = Literal[
+    "frozen",
+    "lms",
+    "rls",
+    "diagonal_rls",
+    "block_rls",
+    "prototype",
+    "protected",
+    "eligibility",
+    "fast_slow",
+]
 
 
 def build_digits_learner(
@@ -433,6 +448,33 @@ def build_digits_learner(
             seed=config.seed,
             regularization=config.rls_regularization,
             forgetting_factor=config.rls_forgetting_factor,
+        )
+    elif kind == "diagonal_rls":
+        readout = DiagonalRLSReadout(
+            feature_size,
+            10,
+            seed=config.seed,
+            regularization=config.rls_regularization,
+            forgetting_factor=config.rls_forgetting_factor,
+        )
+    elif kind == "block_rls":
+        readout = BlockRLSReadout(
+            feature_size,
+            10,
+            seed=config.seed,
+            regularization=config.rls_regularization,
+            forgetting_factor=config.rls_forgetting_factor,
+            block_size=config.block_size,
+        )
+    elif kind == "prototype":
+        readout = PrototypeReadout(feature_size, 10, seed=config.seed)
+    elif kind == "protected":
+        readout = ProtectedFastSlowReadout(
+            feature_size,
+            10,
+            seed=config.seed,
+            fast_learning_rate=config.lms_learning_rate,
+            fast_decay=config.fast_decay,
         )
     elif kind == "fast_slow":
         readout = FastSlowLMSReadout(
@@ -520,10 +562,21 @@ def _learner_training_arrays(learner: OnlineReservoir) -> tuple[np.ndarray, ...]
         arrays.extend(
             [learner.readout.slow_weights, learner.readout.fast_weights]
         )
+    elif isinstance(learner.readout, ProtectedFastSlowReadout):
+        arrays.extend(
+            [learner.readout.slow_memory.centroids, learner.readout.slow_memory.counts]
+        )
+        arrays.append(learner.readout.fast_weights)
     else:
         arrays.append(learner.readout.weights)
     if isinstance(learner.readout, RLSReadout):
         arrays.append(learner.readout.inverse_correlation)
+    elif isinstance(learner.readout, DiagonalRLSReadout):
+        arrays.append(learner.readout.inverse_diagonal)
+    elif isinstance(learner.readout, BlockRLSReadout):
+        arrays.extend(learner.readout.inverse_blocks)
+    elif isinstance(learner.readout, PrototypeReadout):
+        arrays.append(learner.readout.counts)
     if isinstance(learner, EligibilityReservoir):
         arrays.append(learner.feedback_weights)
     return tuple(arrays)
@@ -722,8 +775,21 @@ def run_digits_experiment(config: DigitsExperimentConfig) -> dict[str, Any]:
         "frozen",
         "lms",
         "rls",
+        "diagonal_rls",
+        "block_rls",
+        "prototype",
+        "protected",
         "eligibility",
         "fast_slow",
+    )
+    repeated_config = replace(
+        config, passes=config.passes * (1 + config.augmentation_copies)
+    )
+    protocol_specs = (
+        ("shuffled", split, config),
+        ("shuffled_repeated", split, repeated_config),
+        ("shuffled_augmented", augmented_split, config),
+        ("class_ordered", split, config),
     )
     return {
         "experiment": "digits_8x8_continual_classification",
@@ -734,6 +800,8 @@ def run_digits_experiment(config: DigitsExperimentConfig) -> dict[str, Any]:
             "classes": 10,
             "train_samples": len(split.train_labels),
             "augmented_train_samples": len(augmented_split.train_labels),
+            "repeated_train_samples": len(split.train_labels)
+            * repeated_config.passes,
             "test_samples": len(split.test_labels),
         },
         "protocols": {
@@ -741,12 +809,12 @@ def run_digits_experiment(config: DigitsExperimentConfig) -> dict[str, Any]:
                 kind: run_digits_model(
                     kind,
                     protocol,
-                    config,
-                    split=augmented_split if protocol == "shuffled_augmented" else split,
+                    protocol_config,
+                    split=protocol_split,
                 )
                 for kind in kinds
             }
-            for protocol in ("shuffled", "shuffled_augmented", "class_ordered")
+            for protocol, protocol_split, protocol_config in protocol_specs
         },
     }
 

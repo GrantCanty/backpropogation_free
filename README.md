@@ -12,6 +12,7 @@ The experimental contract and milestone plan are in [PLAN.md](PLAN.md).
 
 - Strict `predict -> score -> learn` streaming protocol
 - Fixed recurrent reservoir with LMS and RLS online readouts
+- Diagonal/block RLS approximations and protected prototype memories
 - Local recurrent and input eligibility traces with fixed random feedback
 - Surprise-gated recurrent plasticity
 - Fast/slow readout weights with gradual consolidation
@@ -23,6 +24,7 @@ The experimental contract and milestone plan are in [PLAN.md](PLAN.md).
 - Multi-seed replication and ablations
 - Isolated truncated-BPTT systems baseline
 - JSON results and optional plots
+- Lazy 8x8/28x28 stream-length and feature-width scaling benchmarks
 
 All current data is generated or bundled locally and handled deterministically.
 Running the MVP does not download a dataset.
@@ -35,6 +37,8 @@ PYTHONPATH=src python3 -m no_backprop signal --output results/signal.json
 PYTHONPATH=src python3 -m no_backprop delayed --output results/delayed.json
 PYTHONPATH=src python3 -m no_backprop continual --output results/continual.json
 PYTHONPATH=src python3 -m no_backprop digits --output results/digits.json
+PYTHONPATH=src python3 -m no_backprop memory --output results/milestone6.json
+PYTHONPATH=src python3 -m no_backprop scale --output results/scaling.json
 PYTHONPATH=src python3 -m no_backprop replicate --output results/replication.json
 
 # Conventional comparison, kept outside the core package
@@ -58,6 +62,11 @@ augmented-shuffled stream adds deterministic translations and noise to training
 images only; the class-ordered stream measures adaptation and catastrophic
 forgetting. Every held-out pass explicitly verifies that model weights remain
 unchanged.
+
+The scale command does not allocate a 60,000-image dataset. It reuses one blank
+image while executing the full predict/learn path, which isolates learner state
+and runtime scaling. Its 28x28 case matches Fashion-MNIST's image dimensions and
+60,000-example training-set length without downloading Fashion-MNIST.
 
 ## Architecture
 
@@ -92,8 +101,19 @@ The controlled MVP passes the five gates in `PLAN.md`:
 - on the same shuffled image stream, a parameter-matched BPTT/Adam RNN reaches
   about 89% held-out accuracy versus about 91% for RLS; deterministic
   augmentation raises BPTT to about 90% but lowers RLS to about 88%
+- exact RLS state is constant across 60,000 images, but its quadratic feature
+  state grows from 38 KB at width 65 to 2.05 MB at width 513; block RLS reduces
+  that width-513 state to 104 KB while retaining 86% shuffled-digit accuracy
 
 These results validate the experimental machinery and the narrow MVP
 hypotheses. They do **not** establish an advantage on real-world data or prove
 that local learning generally outperforms backpropagation. See
 [docs/RESULTS.md](docs/RESULTS.md) for measurements and limitations.
+
+## Roadmap
+
+Milestone 6 focuses on scalable continual memory, forgetting-factor behavior,
+and concept drift. The later Milestone 7 will investigate JEPA-inspired
+predictive representations trained with forward-only local updates. It is not a
+reimplementation of I-JEPA: no automatic differentiation or backward pass will
+enter the core learner.

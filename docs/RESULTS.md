@@ -9,7 +9,7 @@ the implementations in this repository, not for general performance claims.
 
 ## Verification
 
-The complete suite contains 30 tests covering:
+The complete suite contains 41 tests covering:
 
 - strict predict-before-learn ordering
 - deterministic streams
@@ -23,6 +23,8 @@ The complete suite contains 30 tests covering:
 - deterministic local digits splits and matched stream orderings
 - deterministic augmentation and weight-locked evaluation for both learner
   families
+- diagonal/block RLS updates, protected prototype state, and checkpoint recovery
+- lazy blank-image streams and analytic feature-width projections
 
 Run it with:
 
@@ -190,6 +192,104 @@ accuracy and sharply reduces its seed variance, but slightly reduces RLS's mean
 accuracy. The next augmentation study should separate translation from noise
 and match total exposure with a repeated-unaugmented control.
 
+## Milestone 6: scalable continual memory
+
+Milestone 6 separates learning quality from systems scaling. Quality results use
+the bundled digits split and aggregate seeds 7, 17, and 29. The systems run uses
+synthetic blank images because accuracy is deliberately irrelevant there.
+
+### Memory approximations
+
+| Learner | State at width 65 | Shuffled | Repeated plain | Augmented | Class ordered |
+|---|---:|---:|---:|---:|---:|
+| LMS | 42.1 KB | 67.33% | 73.67% | 67.33% | 10.00% |
+| Exact RLS | 75.1 KB | **90.83%** | **92.08%** | **88.25%** | **88.83%** |
+| Diagonal RLS | 42.6 KB | 77.83% | 79.58% | 74.67% | 10.08% |
+| Block RLS, width 16 | 50.1 KB | 86.00% | 88.33% | 82.25% | 47.17% |
+| Class prototypes | 42.2 KB | 67.17% | 67.17% | 64.25% | 67.17% |
+| Protected prototype + fast LMS | 47.2 KB | 45.58% | 40.50% | 42.42% | 10.00% |
+
+Block RLS is the best approximation so far: it saves one third of exact RLS's
+total model state and loses 4.8 percentage points shuffled. It does not preserve
+enough cross-block information for the ordered stream. Diagonal RLS demonstrates
+more sharply that correlations—not just per-feature learning rates—are central
+to RLS's retention.
+
+The prototype memory cannot match RLS generalization, but unlike LMS it does not
+collapse under class ordering. The first protected fast/slow hybrid is a failed
+intervention: its fast component dominates the stable prototype prediction.
+Future work must gate or route fast memory rather than simply add it to the slow
+prediction.
+
+Repeating the original stream improves every adaptive linear readout more than
+the chosen translation/noise augmentation. This confirms that the earlier
+augmented comparison mixed augmentation effects with increased exposure.
+
+### RLS forgetting factor
+
+The heuristic effective history of exponentially weighted RLS is
+`1 / (1 - factor)`. Factor 1.0 has no exponential forgetting.
+
+| Factor | Approx. history | Shuffled | Ordered | Original retained after inversion | Inverted learned | Original after return | Inverted retained after return |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1.0 | unlimited | 90.08% | **90.08%** | **84.42%** | 78.58% | 87.75% | 74.00% |
+| 0.9999 | 10,000 | 90.17% | 89.92% | 83.33% | 80.17% | 88.08% | **74.50%** |
+| 0.999 | 1,000 | **90.83%** | 88.83% | 73.33% | **86.08%** | **89.33%** | 68.00% |
+| 0.99 | 100 | 88.58% | 37.08% | 8.42% | 84.50% | 88.17% | 7.67% |
+| 0.95 | 20 | 70.92% | 12.83% | 9.75% | 67.08% | 66.08% | 10.58% |
+
+There is no universally best factor. `1.0` and `0.9999` are stable memories;
+`0.999` adapts more strongly while retaining useful old performance; `0.99`
+behaves like a fast context-specific memory and almost completely overwrites the
+previous context. `0.95` forgets too quickly even for this stream.
+
+### Lazy 60,000-image scaling
+
+Fashion-MNIST images are 28x28, with 60,000 training examples. The scaling
+benchmark reuses one all-zero image—512 bytes at 8x8 or 6,272 bytes at 28x28—so
+it exercises the learner without allocating or downloading a dataset.
+
+| Learner | 8x8 images/s at 60k | 8x8 state | 28x28 images/s at 60k | 28x28 state | Bounded |
+|---|---:|---:|---:|---:|---:|
+| LMS | 8,458 | 42.1 KB | 2,521 | 52.1 KB | yes |
+| Exact RLS | 7,318 | 75.1 KB | 2,419 | 85.1 KB | yes |
+| Diagonal RLS | 8,049 | 42.6 KB | 2,489 | 52.6 KB | yes |
+| Block RLS | 6,334 | 50.1 KB | 2,296 | 60.1 KB | yes |
+| Prototypes | 4,428 | 42.2 KB | 1,283 | 52.2 KB | yes |
+| Protected fast/slow | 3,861 | 47.2 KB | 1,162 | 57.2 KB | yes |
+
+Throughput is nearly constant from 1,000 through 60,000 images for every
+learner, and state size never changes. The 28x28 stream is about three times
+slower because it performs 28 recurrent row steps instead of eight. At hidden
+width 64, recurrent computation dominates enough that exact RLS is only about
+4% slower than LMS in the 28x28 end-to-end run.
+
+### Feature-width scaling
+
+The readout-only benchmark isolates the dimension that makes RLS quadratic.
+
+| Width | Exact RLS updates/s | Exact state | Diagonal updates/s | Diagonal state | Block updates/s | Block state |
+|---:|---:|---:|---:|---:|---:|---:|
+| 65 | 39,180 | 38.1 KB | 84,647 | 5.6 KB | 22,412 | 13.1 KB |
+| 129 | 16,585 | 140.1 KB | 77,323 | 11.1 KB | 13,181 | 26.1 KB |
+| 257 | 4,655 | 536.1 KB | 66,027 | 22.1 KB | 7,310 | 52.1 KB |
+| 513 | 804 | 2.05 MB | 35,429 | 44.1 KB | 3,605 | 104.1 KB |
+
+At a projected width of 4,097, exact RLS requires about 128.4 MB of float64
+readout state, versus 0.34 MB for diagonal RLS and 0.81 MB for 16-wide block
+RLS. These projections are analytic state counts; throughput was measured only
+through width 513.
+
+### CPU versus accelerator interpretation
+
+The current LMS/RLS/BPTT throughput comparison uses tiny models, batch size one,
+and CPU execution. It does not predict GPU ordering. BPTT can use accelerator
+parallelism much more effectively with wider models, longer sequences, or
+batches; batch-one tiny models may instead be dominated by launch and
+synchronization overhead. LMS and RLS can also use accelerator matrix kernels,
+especially at larger widths. A future GPU comparison must report both strict
+per-event updates and a separately labeled batched-throughput mode.
+
 ## Acceptance gates
 
 1. **Mechanical correctness:** passed; core code has no autograd dependency.
@@ -215,6 +315,8 @@ and match total exposure with a repeated-unaugmented control.
   repeating the original stream for the same number of updates.
 - RLS's strong retention uses quadratic state, so it is not yet a scalable
   answer to continual learning.
+- Blank-image scaling validates systems behavior, not accuracy or numerical
+  behavior on a diverse 60,000-image stream.
 - CPU throughput does not establish energy or accelerator efficiency.
 
 The next milestone should select exactly one local domain—streaming audio/sensor

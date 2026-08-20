@@ -18,6 +18,12 @@ from no_backprop.experiment import (
 )
 from no_backprop.replication import ReplicationConfig, run_replication
 from no_backprop.plotting import load_result, plot_result
+from no_backprop.milestone6 import Milestone6Config, run_milestone6
+from no_backprop.scaling import (
+    BlankImageScalingConfig,
+    FeatureWidthScalingConfig,
+    run_scaling_experiment,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -56,6 +62,54 @@ def build_parser() -> argparse.ArgumentParser:
     digits.add_argument("--augmentation-copies", type=int, default=1)
     digits.add_argument("--seed", type=int, default=29)
     digits.add_argument("--output", type=str)
+    memory = subparsers.add_parser(
+        "memory", help="run Milestone 6 scalable-memory quality experiments"
+    )
+    memory.add_argument("--hidden-size", type=int, default=64)
+    memory.add_argument("--test-per-class", type=int, default=40)
+    memory.add_argument("--seed", type=int, default=29)
+    memory.add_argument("--block-size", type=int, default=16)
+    memory.add_argument(
+        "--forgetting-factors",
+        type=float,
+        nargs="+",
+        default=[1.0, 0.9999, 0.999, 0.99, 0.95],
+    )
+    memory.add_argument("--output", type=str)
+    scaling = subparsers.add_parser(
+        "scale", help="run lazy image-stream and feature-width scaling benchmarks"
+    )
+    scaling.add_argument(
+        "--sample-counts", type=int, nargs="+", default=[1_000, 10_000, 60_000]
+    )
+    scaling.add_argument("--image-sizes", type=int, nargs="+", default=[8, 28])
+    scaling.add_argument("--hidden-size", type=int, default=64)
+    scaling.add_argument(
+        "--feature-widths", type=int, nargs="+", default=[65, 129, 257, 513]
+    )
+    scaling.add_argument("--feature-updates", type=int, default=1_000)
+    scaling.add_argument(
+        "--kinds",
+        nargs="+",
+        choices=(
+            "lms",
+            "rls",
+            "diagonal_rls",
+            "block_rls",
+            "prototype",
+            "protected",
+        ),
+        default=[
+            "lms",
+            "rls",
+            "diagonal_rls",
+            "block_rls",
+            "prototype",
+            "protected",
+        ],
+    )
+    scaling.add_argument("--seed", type=int, default=41)
+    scaling.add_argument("--output", type=str)
     replicate = subparsers.add_parser(
         "replicate", help="run delayed and continual benchmarks across seeds"
     )
@@ -111,6 +165,38 @@ def main(argv: list[str] | None = None) -> int:
             seed=args.seed,
         )
         result = run_digits_experiment(config)
+        if args.output:
+            write_json_result(result, args.output)
+        print(json.dumps(result, indent=2, sort_keys=True))
+    elif args.command == "memory":
+        result = run_milestone6(
+            Milestone6Config(
+                hidden_size=args.hidden_size,
+                test_per_class=args.test_per_class,
+                seed=args.seed,
+                block_size=args.block_size,
+                forgetting_factors=tuple(args.forgetting_factors),
+            )
+        )
+        if args.output:
+            write_json_result(result, args.output)
+        print(json.dumps(result, indent=2, sort_keys=True))
+    elif args.command == "scale":
+        result = run_scaling_experiment(
+            BlankImageScalingConfig(
+                sample_counts=tuple(args.sample_counts),
+                image_sizes=tuple(args.image_sizes),
+                hidden_size=args.hidden_size,
+                seed=args.seed,
+                kinds=tuple(args.kinds),
+            ),
+            FeatureWidthScalingConfig(
+                feature_widths=tuple(args.feature_widths),
+                updates=args.feature_updates,
+                seed=args.seed + 2,
+                kinds=tuple(args.kinds),
+            ),
+        )
         if args.output:
             write_json_result(result, args.output)
         print(json.dumps(result, indent=2, sort_keys=True))
