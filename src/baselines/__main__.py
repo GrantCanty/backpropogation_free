@@ -11,13 +11,19 @@ from baselines.compare import (
     run_digits_systems_comparison,
     run_systems_comparison,
 )
+from baselines.memory_backprop import (
+    MemoryBackpropComparisonConfig,
+    run_memory_backprop_comparison,
+)
 from no_backprop.experiment import write_json_result
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run conventional baseline comparisons")
     parser.add_argument(
-        "--benchmark", choices=("signal", "digits"), default="signal"
+        "--benchmark",
+        choices=("signal", "digits", "memory-capstone"),
+        default="signal",
     )
     parser.add_argument("--steps", type=int, default=3_000)
     parser.add_argument("--regime-length", type=int, default=750)
@@ -28,9 +34,33 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--passes", type=int, default=1)
     parser.add_argument("--augmentation-copies", type=int, default=1)
     parser.add_argument("--learning-rate", type=float, default=0.001)
+    parser.add_argument(
+        "--test-seeds",
+        type=int,
+        nargs="+",
+        default=[3, 7, 11, 17, 23, 29, 37, 41, 47, 53],
+    )
+    parser.add_argument(
+        "--development-seeds", type=int, nargs="+", default=[2, 5, 13]
+    )
+    parser.add_argument(
+        "--learning-rates",
+        type=float,
+        nargs="+",
+        default=[0.0001, 0.0003, 0.001, 0.003, 0.01],
+    )
     parser.add_argument("--output", type=str)
     args = parser.parse_args(argv)
-    if args.benchmark == "digits":
+    if args.benchmark == "memory-capstone":
+        result = run_memory_backprop_comparison(
+            MemoryBackpropComparisonConfig(
+                test_seeds=tuple(args.test_seeds),
+                development_seeds=tuple(args.development_seeds),
+                test_per_class=args.test_per_class,
+                learning_rates=tuple(args.learning_rates),
+            )
+        )
+    elif args.benchmark == "digits":
         seed = 29 if args.seed is None else args.seed
         digits_config = DigitsSystemsComparisonConfig(
             hidden_size=args.hidden_size,

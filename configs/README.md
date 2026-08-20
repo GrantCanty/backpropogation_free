@@ -8,6 +8,8 @@ Milestone 6 quality and forgetting-factor defaults are in `milestone6.json`;
 the lazy 8x8/28x28 systems benchmark is in `scaling.json`.
 The recurring-regime permanent-capacity and expanded RLS-factor capstone is in
 `memory_capstone.json`.
+The disjoint-development-seed, matched online-Adam comparison is in
+`memory_backprop_comparison.json`.
 The paired recurrent/pixel/fixed-convolution frontend study is in
 `frontends.json`.
 The forward-only masked latent-prediction study is in `predictive.json`.

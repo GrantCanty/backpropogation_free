@@ -69,6 +69,8 @@ PYTHONPATH=src python3 -m no_backprop replicate --output results/replication.jso
 PYTHONPATH=src python3 -m baselines --output results/systems.json
 PYTHONPATH=src python3 -m baselines --benchmark digits \
   --output results/digits-systems.json
+PYTHONPATH=src python3 -m baselines --benchmark memory-capstone \
+  --output results/memory-backprop-comparison.json
 
 # Optional local plots
 PYTHONPATH=src python3 -m no_backprop plot \
@@ -264,6 +266,10 @@ The controlled MVP passes the five gates in `PLAN.md`:
   0.01 points while retaining 5.31 more points before return and finishing 3.10
   points higher; this costs 4.8 times factor-1 RLS state and 55% lower NumPy CPU
   throughput, making the quality/state frontier explicit rather than free
+- against disjoint-development-tuned online Adam, a state-near 64-unit MLP
+  adapts 5.83 points faster than Managed-32 but retains 30.71 fewer points before
+  return and finishes 13.14 points lower; Managed-32 uses 5% less persistent
+  state and processes about 1.9 times as many batch-one CPU updates
 
 These results validate the experimental machinery and the narrow MVP
 hypotheses. They do **not** establish an advantage on real-world data or prove
@@ -279,3 +285,11 @@ signed-magnitude features, and cumulative unit-weight statistics. Larger image
 datasets, recommendation, reinforcement learning, learned predictive
 coordinates, and accelerator work remain follow-up projects rather than
 requirements for this result.
+
+The matched online-backprop comparison makes the forward-only choice empirical
+rather than assumed. It shows that ordinary continuously updated Adam models
+are more immediately plastic but substantially less stable on recurring
+regimes without replay. This is evidence for the current design under a strict
+no-replay contract, not a claim that backpropagation is incompatible with
+continual learning or that specialized backprop-based continual methods cannot
+close the gap.

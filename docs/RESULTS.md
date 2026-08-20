@@ -1084,11 +1084,67 @@ establish unbounded lifelong capacity, large-image scaling, or superiority to
 online backpropagation. Managed 32 is the balanced reference configuration;
 Managed 64 demonstrates the higher-cost quality frontier.
 
+### Matched continuous backpropagation comparison
+
+The earlier BPTT study compared recurrent architectures on shuffled images; it
+did not explain whether forward-only learning was justified for the selected
+recurring-memory system. This final comparison holds the stable
+signed-magnitude frontend, six-phase stream, train/test splits, event order,
+batch size one, one update per image, and absence of replay fixed. It adds two
+ordinary continuously trained backpropagation controls:
+
+- a linear softmax classifier with Adam;
+- a 64-unit tanh MLP with Adam, using float64 like the local learners.
+
+Learning rates are selected independently for each architecture from
+`0.0001, 0.0003, 0.001, 0.003, 0.01` on development seeds 2, 5, and 13. These
+are disjoint from the ten test seeds. The preregistered selection score weights
+first-shift online accuracy, pre-return retention, return online accuracy, and
+final mean accuracy equally. It selects 0.01 for the linear model and 0.003 for
+the MLP. Test results are not used for optimizer selection.
+
+| Model | First-shift online | Pre-return | Return online | Final mean | Persistent state | Images/s |
+|---|---:|---:|---:|---:|---:|---:|
+| RLS factor 1 | 68.57% | 73.29% | 79.77% | 77.51% | 39.1 KB | **12,203** |
+| Managed 32 | 69.67% | 75.49% | 82.23% | 79.08% | 109.8 KB | 6,795 |
+| Managed 64 | 70.22% | **75.84%** | 82.68% | **80.36%** | 187.9 KB | 5,432 |
+| Online Adam linear | 73.91% | 38.48% | 81.70% | 41.60% | **15.6 KB** | 4,752 |
+| Online Adam MLP-64 | **75.50%** | 44.78% | **88.97%** | 65.94% | 115.5 KB | 3,501 |
+
+The backpropagation models confirm that gradients and continuous learning are
+compatible: both update after every individual event, and the MLP learns new
+and returning domains fastest. The cost is severe interference. Relative to
+Managed 32, the state-near MLP gains 5.83 ± 2.10 points first-shift and 6.73 ±
+2.03 return-online, but loses 30.71 ± 2.32 points immediately before return and
+13.14 ± 5.31 final mean. Values are paired means with nominal 95% Student-t
+half-widths; every difference excludes zero.
+
+The MLP stores 115.5 KB persistently—5.2% more than Managed 32—and its maximum
+tracked saved activations add 1.1 KB. Managed 32 processes 1.94 times as many
+CPU training images per second in this batch-one float64 comparison. The small
+linear model uses only 15.6 KB plus 0.6 KB of saved activations, but its final
+mean accuracy is 37.48 ± 4.96 points below Managed 32. These are implementation-
+and-CPU-specific measurements, not GPU or energy claims.
+
+This supports choosing forward-only cumulative memory for the project's strict
+no-replay recurring-regime objective: it gives up some immediate plasticity for
+substantially stronger persistence and final joint performance, while the
+state-near Adam alternative is slower here. The comparison does not isolate
+gradient use inside an otherwise identical architecture, nor cover replay,
+EWC-style regularization, expandable backpropagation networks, or other
+specialized continual-learning methods. Therefore the defensible conclusion is
+that this forward-only design beats ordinary matched online Adam under the
+tested contract—not that backpropagation is inherently unsuitable for
+continual learning.
+
 ## Limitations and next decision
 
 - All tasks are synthetic and small.
 - Hyperparameters have not undergone a formal search.
-- The BPTT comparison is controlled but not equivalently optimized.
+- The original BPTT comparison is controlled but not equivalently optimized.
+  The final online-Adam comparison tunes learning rates on disjoint development
+  seeds, but does not tune architectures or test specialized backprop-based
+  continual-learning algorithms.
 - Per-synapse eligibility scales quadratically in a dense recurrent layer.
 - There is no adversarial update protection or production safety layer.
 - Retention still declines when context zero returns.
@@ -1155,8 +1211,10 @@ Managed 64 demonstrates the higher-cost quality frontier.
   later; narrow locality currently protects those historical regions without
   replay, but does not provide a formal non-interference guarantee.
 
-The recurring-regime capstone is the finish line for this first bounded-memory
-project. It establishes a positive stability/plasticity result and measures its
-state and throughput cost. Larger datasets, mature-capacity expansion,
-self-supervised context discovery, recommendation, reinforcement learning, and
-online-backpropagation comparisons are separate follow-up scopes.
+The recurring-regime and matched online-Adam capstones are the finish line for
+this first bounded-memory project. They establish a positive
+stability/plasticity result, justify the forward-only choice under the tested
+no-replay contract, and measure its state and throughput cost. Larger datasets,
+mature-capacity expansion, specialized backprop continual-learning methods,
+self-supervised context discovery, recommendation, and reinforcement learning
+are separate follow-up scopes.
