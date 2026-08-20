@@ -15,6 +15,8 @@ The experimental contract and milestone plan are in [PLAN.md](PLAN.md).
 - Diagonal/block RLS approximations and protected prototype memories
 - Factor-free cumulative slow memory, residual fast representations, and a
   learned reliability ranker
+- Single-path cumulative maturity networks with recruitable local neurons,
+  tested with and without entropy-gated recruitment
 - Local recurrent and input eligibility traces with fixed random feedback
 - Surprise-gated recurrent plasticity
 - Fast/slow readout weights with gradual consolidation
@@ -72,11 +74,13 @@ image while executing the full predict/learn path, which isolates learner state
 and runtime scaling. Its 28x28 case matches Fashion-MNIST's image dimensions and
 60,000-example training-set length without downloading Fashion-MNIST.
 
-The cumulative-memory command tests the factor-free branch. Every labeled
-observation updates an exact cumulative ridge representation with unit weight;
-slow-path errors additionally update compact confusion representations. No raw
-image is retained, and no observation is aged out. A cumulative ranker compares
-slow and fast predictions using confidence and representational proximity.
+The cumulative-memory command tests both factor-free branches. Every labeled
+observation updates cumulative statistics with unit weight, no raw image is
+retained, and no observation is aged out. The first architecture routes between
+slow and residual memories. The maturity architectures instead use one
+prediction path and a shared representation containing recruitable local
+neurons; the matched entropy variant suppresses recruitment on high-entropy
+startup mistakes.
 
 ## Architecture
 
@@ -118,6 +122,9 @@ The controlled MVP passes the five gates in `PLAN.md`:
   without raw-sample storage, but currently trades about 3.4 points of better
   ordered-stream online accuracy for about 4.0 points of final retention versus
   its cumulative RLS slow-path baseline
+- the single-path entropy maturity model averages 90.42% shuffled and 90.33%
+  class-ordered final accuracy, modestly exceeding both its non-entropy ablation
+  and the 90.08% no-discount RLS baseline; the three-seed differences are small
 
 These results validate the experimental machinery and the narrow MVP
 hypotheses. They do **not** establish an advantage on real-world data or prove
@@ -126,8 +133,9 @@ that local learning generally outperforms backpropagation. See
 
 ## Roadmap
 
-The `memory` branch now tests factor-free complementary representations. The
-next mechanism problem is improving the learned fast/slow router without
-discounting historical evidence. JEPA-inspired predictive representations
-remain a later experiment; they are not an I-JEPA reimplementation, and no
-automatic differentiation or backward pass enters the core learner.
+The `memory` branch now tests factor-free complementary and single-path maturity
+representations. The next mechanism problem is learning neuron locality and
+calibrating uncertainty without sacrificing the cumulative invariant.
+JEPA-inspired predictive representations remain a later experiment; they are
+not an I-JEPA reimplementation, and no automatic differentiation or backward
+pass enters the core learner.

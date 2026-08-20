@@ -563,6 +563,250 @@ class CumulativeMemoryReadout:
         return sum(array.nbytes for array in arrays)
 
 
+def _normalized_entropy(scores: FloatArray) -> float:
+    """Return categorical entropy in [0, 1] from finite uncalibrated scores."""
+
+    if len(scores) <= 1:
+        return 0.0
+    shifted = scores - float(np.max(scores))
+    exponentials = np.exp(np.clip(shifted, -700.0, 0.0))
+    probabilities = exponentials / np.sum(exponentials)
+    entropy = -float(
+        np.sum(probabilities * np.log(np.maximum(probabilities, np.finfo(float).tiny)))
+    )
+    return entropy / float(np.log(len(scores)))
+
+
+@dataclass
+class CumulativeMaturityReadout:
+    """Single-path expanding representation with evidence-based maturation.
+
+    Every observation updates one cumulative ridge model.  Recruitable radial
+    neurons extend the shared representation without producing a second expert
+    prediction or requiring a router.  A neuron's cumulative activation energy
+    is its maturity evidence; neither model variant ages or decays state.
+
+    When ``entropy_gated`` is true, an error recruits capacity only when its
+    predictive entropy is below the cumulative mean entropy of correct
+    predictions.  The matched control recruits on any representationally
+    distinct error.
+    """
+
+    input_size: int
+    output_size: int
+    seed: int = 0
+    regularization: float = 1.0
+    max_neurons: int = 32
+    rbf_width: float = 0.05
+    min_center_distance: float = 0.01
+    entropy_gated: bool = False
+
+    def __post_init__(self) -> None:
+        if self.regularization <= 0.0:
+            raise ValueError("regularization must be positive")
+        if self.max_neurons < 0:
+            raise ValueError("max_neurons cannot be negative")
+        if self.rbf_width <= 0.0:
+            raise ValueError("rbf_width must be positive")
+        if self.min_center_distance < 0.0:
+            raise ValueError("min_center_distance cannot be negative")
+
+        self.expanded_size = self.input_size + self.max_neurons
+        self.expanded_weights = np.zeros(
+            (self.output_size, self.expanded_size), dtype=np.float64
+        )
+        self.inverse_correlation = (
+            np.eye(self.expanded_size, dtype=np.float64) / self.regularization
+        )
+        self.neuron_centers = np.zeros(
+            (self.max_neurons, self.input_size), dtype=np.float64
+        )
+        self.neuron_active = np.zeros(self.max_neurons, dtype=np.float64)
+        self.neuron_evidence = np.zeros(self.max_neurons, dtype=np.float64)
+        self.neuron_labels = np.full(self.max_neurons, -1.0, dtype=np.float64)
+        self.neuron_recruitment_entropy = np.zeros(
+            self.max_neurons, dtype=np.float64
+        )
+        self.active_count = np.zeros(1, dtype=np.float64)
+        self.sample_count = np.zeros(1, dtype=np.float64)
+        self.correct_entropy_sum = np.zeros(1, dtype=np.float64)
+        self.correct_entropy_count = np.zeros(1, dtype=np.float64)
+        self.error_count = np.zeros(1, dtype=np.float64)
+        self.recruitment_candidate_count = np.zeros(1, dtype=np.float64)
+        self.entropy_rejection_count = np.zeros(1, dtype=np.float64)
+        self.proximity_rejection_count = np.zeros(1, dtype=np.float64)
+
+        self._last_features: FloatArray | None = None
+        self._last_expanded: FloatArray | None = None
+        self._last_prediction: FloatArray | None = None
+        self._last_entropy = 1.0
+
+    @property
+    def weights(self) -> FloatArray:
+        return self.expanded_weights
+
+    def _activities(self, features: FloatArray) -> FloatArray:
+        activities = np.zeros(self.max_neurons, dtype=np.float64)
+        count = int(self.active_count[0])
+        if count == 0:
+            return activities
+        differences = self.neuron_centers[:count] - features
+        mean_square_distance = np.mean(np.square(differences), axis=1)
+        activities[:count] = np.exp(
+            -mean_square_distance / (2.0 * self.rbf_width**2)
+        )
+        return activities
+
+    def _expanded_features(self, features: FloatArray) -> FloatArray:
+        return np.concatenate((features, self._activities(features)))
+
+    def predict(self, features: FloatArray) -> FloatArray:
+        features = _validate_vector("features", features, self.input_size)
+        expanded = self._expanded_features(features)
+        prediction = self.expanded_weights @ expanded
+        self._last_features = features.copy()
+        self._last_expanded = expanded
+        self._last_prediction = prediction.copy()
+        self._last_entropy = _normalized_entropy(prediction)
+        return prediction.copy()
+
+    def _is_distinct(self, features: FloatArray) -> bool:
+        count = int(self.active_count[0])
+        if count == 0:
+            return True
+        distances = np.mean(
+            np.square(self.neuron_centers[:count] - features), axis=1
+        )
+        return float(np.min(distances)) >= self.min_center_distance
+
+    def _entropy_allows_recruitment(self) -> bool:
+        if not self.entropy_gated:
+            return True
+        correct_count = self.correct_entropy_count[0]
+        if correct_count == 0.0:
+            return False
+        correct_mean = self.correct_entropy_sum[0] / correct_count
+        return self._last_entropy + np.finfo(float).eps < correct_mean
+
+    def _recruit(self, features: FloatArray, target_class: int) -> None:
+        index = int(self.active_count[0])
+        self.neuron_centers[index] = features
+        self.neuron_active[index] = 1.0
+        self.neuron_labels[index] = float(target_class)
+        self.neuron_recruitment_entropy[index] = self._last_entropy
+        self.active_count[0] += 1.0
+
+    def update(
+        self,
+        features: FloatArray,
+        target: FloatArray,
+        prediction: FloatArray,
+    ) -> None:
+        features = _validate_vector("features", features, self.input_size)
+        target = _validate_vector("target", target, self.output_size)
+        _validate_vector("prediction", prediction, self.output_size)
+        if (
+            self._last_features is None
+            or self._last_expanded is None
+            or self._last_prediction is None
+        ):
+            raise RuntimeError("predict must be called before update")
+
+        target_class = int(np.argmax(target))
+        predicted_class = int(np.argmax(self._last_prediction))
+        correct = target_class == predicted_class
+        if correct:
+            self.correct_entropy_sum[0] += self._last_entropy
+            self.correct_entropy_count[0] += 1.0
+        else:
+            self.error_count[0] += 1.0
+            self.recruitment_candidate_count[0] += 1.0
+            capacity_available = int(self.active_count[0]) < self.max_neurons
+            entropy_allowed = self._entropy_allows_recruitment()
+            distinct = self._is_distinct(features)
+            if capacity_available and entropy_allowed and distinct:
+                self._recruit(features, target_class)
+                # The recruiting observation immediately trains the new unit.
+                self._last_expanded = self._expanded_features(features)
+            elif capacity_available and not entropy_allowed:
+                self.entropy_rejection_count[0] += 1.0
+            elif capacity_available and not distinct:
+                self.proximity_rejection_count[0] += 1.0
+
+        expanded = self._last_expanded
+        prediction_for_update = self.expanded_weights @ expanded
+        projected = self.inverse_correlation @ expanded
+        denominator = 1.0 + float(expanded @ projected)
+        gain = projected / denominator
+        self.expanded_weights += np.outer(target - prediction_for_update, gain)
+        self.inverse_correlation -= np.outer(
+            gain, expanded @ self.inverse_correlation
+        )
+        self.inverse_correlation = 0.5 * (
+            self.inverse_correlation + self.inverse_correlation.T
+        )
+        if self.max_neurons:
+            self.neuron_evidence += np.square(expanded[self.input_size :])
+        self.sample_count[0] += 1.0
+
+        self._last_features = None
+        self._last_expanded = None
+        self._last_prediction = None
+
+    @property
+    def diagnostics(self) -> dict[str, float | int | bool]:
+        count = int(self.active_count[0])
+        evidence = self.neuron_evidence[:count]
+        maturity = evidence / (self.regularization + evidence)
+        correct_count = self.correct_entropy_count[0]
+        return {
+            "entropy_gated": self.entropy_gated,
+            "samples_in_cumulative_statistics": int(self.sample_count[0]),
+            "stored_raw_samples": 0,
+            "active_neurons": count,
+            "available_neurons": self.max_neurons - count,
+            "mean_neuron_maturity": (
+                0.0 if count == 0 else float(np.mean(maturity))
+            ),
+            "minimum_neuron_maturity": (
+                0.0 if count == 0 else float(np.min(maturity))
+            ),
+            "maximum_neuron_maturity": (
+                0.0 if count == 0 else float(np.max(maturity))
+            ),
+            "observed_errors": int(self.error_count[0]),
+            "recruitment_candidates": int(self.recruitment_candidate_count[0]),
+            "entropy_rejections": int(self.entropy_rejection_count[0]),
+            "proximity_rejections": int(self.proximity_rejection_count[0]),
+            "mean_correct_prediction_entropy": (
+                0.0
+                if correct_count == 0.0
+                else float(self.correct_entropy_sum[0] / correct_count)
+            ),
+        }
+
+    @property
+    def state_nbytes(self) -> int:
+        arrays = (
+            self.expanded_weights,
+            self.inverse_correlation,
+            self.neuron_centers,
+            self.neuron_active,
+            self.neuron_evidence,
+            self.neuron_labels,
+            self.neuron_recruitment_entropy,
+            self.active_count,
+            self.sample_count,
+            self.correct_entropy_sum,
+            self.correct_entropy_count,
+            self.error_count,
+            self.recruitment_candidate_count,
+            self.entropy_rejection_count,
+            self.proximity_rejection_count,
+        )
+        return sum(array.nbytes for array in arrays)
+
+
 @dataclass
 class ProtectedFastSlowReadout:
     """Fast decaying adapter over a non-overwriting prototype memory."""

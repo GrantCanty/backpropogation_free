@@ -34,6 +34,9 @@ class Milestone6Config:
     augmentation_copies: int = 1
     cumulative_regularization: float = 1.0
     cumulative_rank_bins: int = 16
+    maturity_max_neurons: int = 32
+    maturity_rbf_width: float = 0.05
+    maturity_min_center_distance: float = 0.01
     forgetting_factors: tuple[float, ...] = (1.0, 0.9999, 0.999, 0.99, 0.95)
     kinds: tuple[DigitsKind, ...] = (
         "lms",
@@ -54,6 +57,9 @@ def _digits_config(config: Milestone6Config) -> DigitsExperimentConfig:
         augmentation_copies=config.augmentation_copies,
         cumulative_regularization=config.cumulative_regularization,
         cumulative_rank_bins=config.cumulative_rank_bins,
+        maturity_max_neurons=config.maturity_max_neurons,
+        maturity_rbf_width=config.maturity_rbf_width,
+        maturity_min_center_distance=config.maturity_min_center_distance,
     )
 
 

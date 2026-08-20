@@ -23,12 +23,15 @@ class FactorFreeMemoryConfig:
     seed: int = 29
     regularization: float = 1.0
     rank_bins: int = 16
+    maturity_max_neurons: int = 32
+    maturity_rbf_width: float = 0.05
+    maturity_min_center_distance: float = 0.01
     protocols: tuple[DigitsProtocol, ...] = ("shuffled", "class_ordered")
     comparison_kinds: tuple[DigitsKind, ...] = (
         "cumulative_memory",
+        "maturity",
+        "maturity_entropy",
         "rls",
-        "prototype",
-        "protected",
     )
 
 
@@ -42,6 +45,9 @@ def _digits_config(config: FactorFreeMemoryConfig) -> DigitsExperimentConfig:
         rls_forgetting_factor=1.0,
         cumulative_regularization=config.regularization,
         cumulative_rank_bins=config.rank_bins,
+        maturity_max_neurons=config.maturity_max_neurons,
+        maturity_rbf_width=config.maturity_rbf_width,
+        maturity_min_center_distance=config.maturity_min_center_distance,
     )
 
 
@@ -66,12 +72,19 @@ def run_factor_free_drift(config: FactorFreeMemoryConfig) -> dict[str, Any]:
         seed=config.seed,
         cumulative_regularization=config.regularization,
         cumulative_rank_bins=config.rank_bins,
+        maturity_max_neurons=config.maturity_max_neurons,
+        maturity_rbf_width=config.maturity_rbf_width,
+        maturity_min_center_distance=config.maturity_min_center_distance,
     )
     return {
         "protocol": "original_to_inverted_to_original",
         "models": {
             "cumulative_memory": run_drift_model(
                 "cumulative_memory", milestone_config
+            ),
+            "maturity": run_drift_model("maturity", milestone_config),
+            "maturity_entropy": run_drift_model(
+                "maturity_entropy", milestone_config
             ),
             "rls_no_discount": run_drift_model(
                 "rls", milestone_config, rls_forgetting_factor=1.0
@@ -98,6 +111,12 @@ def run_factor_free_memory(
         run["memory_diagnostics"]["samples_in_slow_statistics"]
         for run in cumulative_runs
     )
+    maturity_runs = [
+        model
+        for models in quality.values()
+        for kind, model in models.items()
+        if kind in ("maturity", "maturity_entropy")
+    ]
     return {
         "experiment": "factor_free_cumulative_representation_memory",
         "config": asdict(config),
@@ -111,6 +130,16 @@ def run_factor_free_memory(
                 for run in cumulative_runs
             ),
             "represented_samples_across_protocol_runs": represented_samples,
+            "single_prediction_path_in_maturity_models": True,
+            "every_observation_updates_maturity_statistics": all(
+                run["maturity_diagnostics"]["samples_in_cumulative_statistics"]
+                == run["trained_samples"]
+                for run in maturity_runs
+            ),
+            "maturity_models_store_raw_samples": any(
+                run["maturity_diagnostics"]["stored_raw_samples"]
+                for run in maturity_runs
+            ),
         },
         "quality": quality,
         "concept_drift": run_factor_free_drift(config),

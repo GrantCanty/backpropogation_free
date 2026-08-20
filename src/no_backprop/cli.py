@@ -85,6 +85,11 @@ def build_parser() -> argparse.ArgumentParser:
     cumulative_memory.add_argument("--test-per-class", type=int, default=40)
     cumulative_memory.add_argument("--regularization", type=float, default=1.0)
     cumulative_memory.add_argument("--rank-bins", type=int, default=16)
+    cumulative_memory.add_argument("--maturity-max-neurons", type=int, default=32)
+    cumulative_memory.add_argument("--maturity-rbf-width", type=float, default=0.05)
+    cumulative_memory.add_argument(
+        "--maturity-min-center-distance", type=float, default=0.01
+    )
     cumulative_memory.add_argument("--seed", type=int, default=29)
     cumulative_memory.add_argument("--output", type=str)
     scaling = subparsers.add_parser(
@@ -199,6 +204,9 @@ def main(argv: list[str] | None = None) -> int:
                 test_per_class=args.test_per_class,
                 regularization=args.regularization,
                 rank_bins=args.rank_bins,
+                maturity_max_neurons=args.maturity_max_neurons,
+                maturity_rbf_width=args.maturity_rbf_width,
+                maturity_min_center_distance=args.maturity_min_center_distance,
                 seed=args.seed,
             )
         )

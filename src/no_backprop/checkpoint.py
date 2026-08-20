@@ -12,6 +12,7 @@ from no_backprop.protocol import ProtocolError
 from no_backprop.readouts import (
     BlockRLSReadout,
     CumulativeMemoryReadout,
+    CumulativeMaturityReadout,
     DiagonalRLSReadout,
     FastSlowLMSReadout,
     ProtectedFastSlowReadout,
@@ -40,7 +41,31 @@ def save_checkpoint(learner: OnlineReservoir, destination: str | Path) -> Path:
         "bias": learner.bias,
         "state": learner.state,
     }
-    if isinstance(learner.readout, CumulativeMemoryReadout):
+    if isinstance(learner.readout, CumulativeMaturityReadout):
+        maturity_names = (
+            "expanded_weights",
+            "inverse_correlation",
+            "neuron_centers",
+            "neuron_active",
+            "neuron_evidence",
+            "neuron_labels",
+            "neuron_recruitment_entropy",
+            "active_count",
+            "sample_count",
+            "correct_entropy_sum",
+            "correct_entropy_count",
+            "error_count",
+            "recruitment_candidate_count",
+            "entropy_rejection_count",
+            "proximity_rejection_count",
+        )
+        arrays.update(
+            {
+                f"readout_maturity_{name}": getattr(learner.readout, name)
+                for name in maturity_names
+            }
+        )
+    elif isinstance(learner.readout, CumulativeMemoryReadout):
         arrays.update(
             {
                 "readout_slow_weights": learner.readout.slow_weights,
@@ -113,7 +138,32 @@ def restore_checkpoint(learner: OnlineReservoir, source: str | Path) -> None:
         )
         _copy_array(learner.bias, arrays["bias"], "bias")
         _copy_array(learner.state, arrays["state"], "state")
-        if isinstance(learner.readout, CumulativeMemoryReadout):
+        if isinstance(learner.readout, CumulativeMaturityReadout):
+            maturity_names = (
+                "expanded_weights",
+                "inverse_correlation",
+                "neuron_centers",
+                "neuron_active",
+                "neuron_evidence",
+                "neuron_labels",
+                "neuron_recruitment_entropy",
+                "active_count",
+                "sample_count",
+                "correct_entropy_sum",
+                "correct_entropy_count",
+                "error_count",
+                "recruitment_candidate_count",
+                "entropy_rejection_count",
+                "proximity_rejection_count",
+            )
+            for name in maturity_names:
+                checkpoint_name = f"readout_maturity_{name}"
+                _copy_array(
+                    getattr(learner.readout, name),
+                    arrays[checkpoint_name],
+                    checkpoint_name,
+                )
+        elif isinstance(learner.readout, CumulativeMemoryReadout):
             cumulative_arrays = (
                 ("slow_weights", "readout_slow_weights"),
                 (

@@ -9,7 +9,7 @@ the implementations in this repository, not for general performance claims.
 
 ## Verification
 
-The complete suite contains 46 tests covering:
+The complete suite contains 54 tests covering:
 
 - strict predict-before-learn ordering
 - deterministic streams
@@ -27,6 +27,8 @@ The complete suite contains 46 tests covering:
 - lazy blank-image streams and analytic feature-width projections
 - exact equivalence between sequential cumulative memory and batch ridge
 - factor-free residual compression, locked evaluation, and checkpoint recovery
+- entropy calculation, matched cumulative maturity updates, evidence-based
+  maturation, startup recruitment, locked evaluation, and checkpoint recovery
 
 Run it with:
 
@@ -367,6 +369,77 @@ PYTHONPATH=src python3 -m no_backprop cumulative-memory \
   --output results/cumulative-memory.json
 ```
 
+### Single-path maturity network: entropy ablation
+
+The next intervention removes expert routing. Both matched variants use one
+prediction head over one shared representation:
+
+```text
+reservoir features + all active local neurons -> cumulative ridge prediction
+```
+
+The model reserves capacity for 32 radial neurons. A prediction error can
+recruit a neuron centered on the current representation, provided it is not a
+duplicate of an active center. Every active neuron participates continuously in
+the same feature vector; there is no fast/slow winner. Recursive covariance
+makes new directions highly plastic, while cumulative activation evidence makes
+them progressively stable. All weights and evidence use unit-weight updates
+without decay.
+
+The entropy model is otherwise identical. It recruits on an error only when the
+prediction's normalized categorical entropy is below the cumulative mean
+entropy of correct predictions. Thus uniform startup errors train the shared
+base but do not immediately consume structural capacity. This is a relative,
+cumulative criterion, not an age window.
+
+Results are means across seeds 7, 17, and 29, using localized neurons with RBF
+width 0.05:
+
+| Learner | Shuffled online | Shuffled final | Ordered online | Ordered final | Ordered forgetting | State |
+|---|---:|---:|---:|---:|---:|---:|
+| RLS, no discount | 85.45% | 90.08% | **77.00%** | 90.08% | **0.0383** | 75.1 KB |
+| Routed cumulative memory | 85.25% | 89.75% | 80.43% | 86.08% | 0.0858 | 731.8 KB |
+| Maturity, no entropy | 85.25% | 90.17% | 76.83% | 89.67% | 0.0408 | 135.4 KB |
+| Maturity, entropy | **85.64%** | **90.42%** | 76.93% | **90.33%** | 0.0392 | 135.4 KB |
+
+The entropy variant improves over its matched non-entropy control by 0.38
+points shuffled-online, 0.25 shuffled-final, 0.10 ordered-online, and 0.67
+ordered-final. It also finishes 0.33 points above no-discount RLS shuffled and
+0.25 points above it ordered. These are small three-seed differences, not yet a
+statistically established advantage.
+
+The recruitment behavior is less ambiguous. The non-entropy model fills all 32
+neurons in both protocols. Entropy recruits 22.3 neurons on average shuffled and
+9.0 ordered, rejecting 176.7 and 312.7 errors respectively as high-entropy
+recruitment events. Those observations still update the shared cumulative
+model; only structural expansion is suppressed. No variant stores raw samples.
+
+Localization is essential. With the earlier broad width of 0.2, the
+non-entropy model reaches 97.85% ordered online accuracy but only 15.67% final
+accuracy. Broad neurons adapt by activating across established classes. Entropy
+reduces that failure to 84.99% online and 60.83% final, but cannot make broad
+features stable. Narrow width 0.05 restores approximately 90% final retention.
+
+The original/inverted/original drift benchmark is more favorable to the unified
+representation:
+
+| Learner | After inversion: original | After inversion: inverted | Final original | Final inverted |
+|---|---:|---:|---:|---:|
+| RLS, no discount | 84.42% | 78.58% | 87.75% | 74.00% |
+| Maturity, no entropy | **85.17%** | 79.42% | **88.67%** | **75.75%** |
+| Maturity, entropy | 85.08% | **79.75%** | **88.67%** | 74.75% |
+
+Both maturity models retain more of the original domain while learning the
+inverted representation better than no-discount RLS. Entropy is slightly better
+immediately after inversion; the non-entropy model retains one more point of
+inverted accuracy after the original domain returns.
+
+The result supports a single-path expanding representation over explicit
+routing, but it also narrows the next question: feature locality is currently a
+hand-set geometry, and entropy comes from uncalibrated ridge scores whose mean
+is near its maximum. Future work should learn local receptive fields and
+calibrate predictive uncertainty before scaling the neuron bank.
+
 ## Limitations and next decision
 
 - All tasks are synthetic and small.
@@ -388,9 +461,13 @@ PYTHONPATH=src python3 -m no_backprop cumulative-memory \
   it is factor-free but consumes about ten times the state of exact RLS here.
 - Fast-memory routing improves immediate ordered adaptation but still damages
   final retention, and does not beat cumulative RLS on the drift benchmark.
+- The maturity model preallocates 32 neuron slots, uses a hand-set RBF width,
+  and computes entropy from uncalibrated scores.
+- Past observations have no counterfactual activations for neurons recruited
+  later; narrow locality currently protects those historical regions without
+  replay, but does not provide a formal non-interference guarantee.
 
-The next mechanism experiment should keep the exact cumulative slow invariant
-and replace the binned router with a representation-conditioned ranker that can
-generalize locally without allowing fast predictions to override stable regions.
-Only after it matches the slow baseline's retention should the project add
-learned or expanding encoders.
+The next mechanism experiment should keep the cumulative single-path invariant
+while learning neuron receptive fields or bandwidths from local statistics.
+Entropy calibration and a capacity-width scaling study should precede learned
+or expanding encoders.

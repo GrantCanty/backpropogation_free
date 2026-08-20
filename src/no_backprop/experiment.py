@@ -23,6 +23,7 @@ from no_backprop.metrics import PrequentialMetrics
 from no_backprop.readouts import (
     BlockRLSReadout,
     CumulativeMemoryReadout,
+    CumulativeMaturityReadout,
     DiagonalRLSReadout,
     FastSlowLMSReadout,
     FrozenReadout,
@@ -109,6 +110,9 @@ class DigitsExperimentConfig:
     consolidation_rate: float = 0.002
     cumulative_regularization: float = 1.0
     cumulative_rank_bins: int = 16
+    maturity_max_neurons: int = 32
+    maturity_rbf_width: float = 0.05
+    maturity_min_center_distance: float = 0.01
 
 
 def _process_rss_bytes() -> int | None:
@@ -425,6 +429,8 @@ DigitsKind = Literal[
     "eligibility",
     "fast_slow",
     "cumulative_memory",
+    "maturity",
+    "maturity_entropy",
 ]
 
 
@@ -487,6 +493,17 @@ def build_digits_learner(
             seed=config.seed,
             regularization=config.cumulative_regularization,
             rank_bins=config.cumulative_rank_bins,
+        )
+    elif kind in ("maturity", "maturity_entropy"):
+        readout = CumulativeMaturityReadout(
+            feature_size,
+            10,
+            seed=config.seed,
+            regularization=config.cumulative_regularization,
+            max_neurons=config.maturity_max_neurons,
+            rbf_width=config.maturity_rbf_width,
+            min_center_distance=config.maturity_min_center_distance,
+            entropy_gated=kind == "maturity_entropy",
         )
     elif kind == "fast_slow":
         readout = FastSlowLMSReadout(
@@ -570,7 +587,27 @@ def _learner_training_arrays(learner: OnlineReservoir) -> tuple[np.ndarray, ...]
     """Return all arrays that evaluation must never modify."""
 
     arrays = [learner.input_weights, learner.recurrent_weights, learner.bias]
-    if isinstance(learner.readout, CumulativeMemoryReadout):
+    if isinstance(learner.readout, CumulativeMaturityReadout):
+        arrays.extend(
+            [
+                learner.readout.expanded_weights,
+                learner.readout.inverse_correlation,
+                learner.readout.neuron_centers,
+                learner.readout.neuron_active,
+                learner.readout.neuron_evidence,
+                learner.readout.neuron_labels,
+                learner.readout.neuron_recruitment_entropy,
+                learner.readout.active_count,
+                learner.readout.sample_count,
+                learner.readout.correct_entropy_sum,
+                learner.readout.correct_entropy_count,
+                learner.readout.error_count,
+                learner.readout.recruitment_candidate_count,
+                learner.readout.entropy_rejection_count,
+                learner.readout.proximity_rejection_count,
+            ]
+        )
+    elif isinstance(learner.readout, CumulativeMemoryReadout):
         arrays.extend(
             [
                 learner.readout.slow_weights,
@@ -787,6 +824,8 @@ def run_digits_model(
         result["diagnostics"] = learner.diagnostics
     if isinstance(learner.readout, CumulativeMemoryReadout):
         result["memory_diagnostics"] = learner.readout.diagnostics
+    if isinstance(learner.readout, CumulativeMaturityReadout):
+        result["maturity_diagnostics"] = learner.readout.diagnostics
     return result
 
 
