@@ -1,4 +1,4 @@
-"""Synthetic systems benchmarks for stream length and feature-width scaling."""
+"""No-download systems benchmarks for stream, width, and memory scaling."""
 
 from __future__ import annotations
 
@@ -10,8 +10,10 @@ import numpy as np
 
 from no_backprop.readouts import (
     BlockRLSReadout,
+    CumulativeMaturityReadout,
     DiagonalRLSReadout,
     LMSReadout,
+    ManagedProbationaryMaturityReadout,
     ProtectedFastSlowReadout,
     PrototypeReadout,
     RLSReadout,
@@ -26,6 +28,7 @@ ScalingKind = Literal[
     "block_rls",
     "prototype",
     "protected",
+    "managed_probation",
 ]
 
 
@@ -36,6 +39,7 @@ DEFAULT_SCALING_KINDS: tuple[ScalingKind, ...] = (
     "block_rls",
     "prototype",
     "protected",
+    "managed_probation",
 )
 
 
@@ -48,6 +52,8 @@ class BlankImageScalingConfig:
     hidden_size: int = 64
     classes: int = 10
     block_size: int = 16
+    memory_neurons: int = 32
+    memory_candidates: int = 16
     seed: int = 41
     kinds: tuple[ScalingKind, ...] = DEFAULT_SCALING_KINDS
 
@@ -60,9 +66,27 @@ class FeatureWidthScalingConfig:
     updates: int = 1_000
     classes: int = 10
     block_size: int = 16
+    memory_neurons: int = 32
+    memory_candidates: int = 16
     seed: int = 43
     kinds: tuple[ScalingKind, ...] = DEFAULT_SCALING_KINDS
     projected_widths: tuple[int, ...] = (65, 129, 257, 513, 1_025, 2_049, 4_097)
+
+
+@dataclass(frozen=True)
+class MemoryCapacityScalingConfig:
+    """Managed-memory cost as active-key and candidate bounds increase."""
+
+    feature_width: int = 65
+    key_capacities: tuple[int, ...] = (8, 16, 32, 64, 128)
+    candidate_capacities: tuple[int, ...] = (4, 8, 16, 32, 64)
+    fixed_key_capacity: int = 32
+    fixed_candidate_capacity: int = 16
+    updates: int = 1_000
+    classes: int = 10
+    seed: int = 47
+    projected_widths: tuple[int, ...] = (65, 129, 257, 513, 1_025, 2_049, 4_097)
+    projected_key_capacities: tuple[int, ...] = (32, 64, 128, 256, 512)
 
 
 def _build_readout(
@@ -72,6 +96,8 @@ def _build_readout(
     *,
     block_size: int,
     seed: int,
+    memory_neurons: int = 32,
+    memory_candidates: int = 16,
 ):
     if kind == "lms":
         return LMSReadout(
@@ -106,6 +132,15 @@ def _build_readout(
         return PrototypeReadout(feature_size, classes, seed=seed)
     if kind == "protected":
         return ProtectedFastSlowReadout(feature_size, classes, seed=seed)
+    if kind == "managed_probation":
+        return ManagedProbationaryMaturityReadout(
+            feature_size,
+            classes,
+            seed=seed,
+            regularization=1.0,
+            max_neurons=memory_neurons,
+            max_candidates=memory_candidates,
+        )
     raise ValueError(f"unknown scaling learner: {kind}")
 
 
@@ -127,6 +162,8 @@ def _build_image_learner(
         config.classes,
         block_size=config.block_size,
         seed=config.seed,
+        memory_neurons=config.memory_neurons,
+        memory_candidates=config.memory_candidates,
     )
     return OnlineReservoir(reservoir, readout)
 
@@ -171,6 +208,7 @@ def run_blank_image_model(
         "state_bytes_after": learner.state_nbytes,
         "bounded_state": state_before == learner.state_nbytes,
         "dataset_storage_bytes": blank_image.nbytes,
+        "downloaded_data_bytes": 0,
     }
 
 
@@ -193,8 +231,34 @@ def run_blank_image_scaling(
     }
 
 
+def _projected_managed_memory_bytes(
+    width: int, classes: int, key_capacity: int, candidate_capacity: int
+) -> int:
+    """Return exact allocated array bytes without constructing the readout."""
+
+    if width <= 0 or classes <= 0 or min(key_capacity, candidate_capacity) < 0:
+        raise ValueError(
+            "managed-memory widths must be positive and capacities nonnegative"
+        )
+    expanded = width + key_capacity
+    base = (
+        classes * expanded
+        + expanded * expanded
+        + key_capacity * width
+        + 4 * key_capacity
+        + 11
+    )
+    probation = candidate_capacity * width + 4 * candidate_capacity + 5
+    return np.dtype(np.float64).itemsize * (base + probation)
+
+
 def _projected_readout_bytes(
-    kind: ScalingKind, width: int, classes: int, block_size: int
+    kind: ScalingKind,
+    width: int,
+    classes: int,
+    block_size: int,
+    memory_neurons: int,
+    memory_candidates: int,
 ) -> int:
     itemsize = np.dtype(np.float64).itemsize
     weights = classes * width
@@ -211,6 +275,10 @@ def _projected_readout_bytes(
     elif kind == "protected":
         weights = 2 * classes * width
         auxiliary = classes
+    elif kind == "managed_probation":
+        return _projected_managed_memory_bytes(
+            width, classes, memory_neurons, memory_candidates
+        )
     else:
         auxiliary = 0
     return itemsize * (weights + auxiliary)
@@ -241,6 +309,8 @@ def run_feature_width_scaling(
                 config.classes,
                 block_size=config.block_size,
                 seed=config.seed,
+                memory_neurons=config.memory_neurons,
+                memory_candidates=config.memory_candidates,
             )
             state_before = readout.state_nbytes
             started = time.perf_counter()
@@ -265,7 +335,12 @@ def run_feature_width_scaling(
             "model": kind,
             "feature_width": width,
             "projected_state_bytes": _projected_readout_bytes(
-                kind, width, config.classes, config.block_size
+                kind,
+                width,
+                config.classes,
+                config.block_size,
+                config.memory_neurons,
+                config.memory_candidates,
             ),
         }
         for width in config.projected_widths
@@ -279,12 +354,144 @@ def run_feature_width_scaling(
     }
 
 
+def _measure_managed_memory(
+    *,
+    features: np.ndarray,
+    targets: np.ndarray,
+    key_capacity: int,
+    candidate_capacity: int,
+    classes: int,
+    seed: int,
+    prefill_keys: bool,
+) -> dict[str, Any]:
+    readout = ManagedProbationaryMaturityReadout(
+        features.shape[1],
+        classes,
+        seed=seed,
+        regularization=1.0,
+        max_neurons=key_capacity,
+        max_candidates=candidate_capacity,
+    )
+    if prefill_keys:
+        # Capacity timing needs the local-activation work even though random
+        # samples rarely confirm probationary keys on their own.
+        for index in range(key_capacity):
+            center = features[index % len(features)]
+            CumulativeMaturityReadout._recruit(
+                readout, center, target_class=index % classes
+            )
+    state_before = readout.state_nbytes
+    started = time.perf_counter()
+    for feature, target in zip(features, targets):
+        prediction = readout.predict(feature)
+        readout.update(feature, target, prediction)
+    elapsed = time.perf_counter() - started
+    return {
+        "feature_width": features.shape[1],
+        "key_capacity": key_capacity,
+        "candidate_capacity": candidate_capacity,
+        "updates": len(features),
+        "elapsed_seconds": elapsed,
+        "updates_per_second": len(features) / elapsed,
+        "state_bytes_before": state_before,
+        "state_bytes_after": readout.state_nbytes,
+        "bounded_state": state_before == readout.state_nbytes,
+        "active_keys": readout.diagnostics["active_neurons"],
+        "pending_candidates": readout.diagnostics["pending_candidates"],
+        "prefilled_keys": prefill_keys,
+    }
+
+
+def run_memory_capacity_scaling(
+    config: MemoryCapacityScalingConfig = MemoryCapacityScalingConfig(),
+) -> dict[str, Any]:
+    """Measure each memory-capacity axis and project their combined state."""
+
+    if (
+        config.feature_width <= 0
+        or config.updates <= 0
+        or config.classes <= 0
+        or not config.key_capacities
+        or not config.candidate_capacities
+        or not config.projected_widths
+        or not config.projected_key_capacities
+        or min(config.key_capacities) < 0
+        or min(config.candidate_capacities) < 0
+        or min(config.projected_widths) <= 0
+        or min(config.projected_key_capacities) < 0
+        or config.fixed_key_capacity < 0
+        or config.fixed_candidate_capacity < 0
+    ):
+        raise ValueError(
+            "memory scaling dimensions must be nonnegative and nonempty"
+        )
+    rng = np.random.default_rng(config.seed)
+    features = rng.normal(size=(config.updates, config.feature_width))
+    features /= np.maximum(
+        np.linalg.norm(features, axis=1, keepdims=True),
+        np.finfo(float).tiny,
+    )
+    targets = np.eye(config.classes, dtype=np.float64)[
+        np.arange(config.updates) % config.classes
+    ]
+    key_runs = [
+        _measure_managed_memory(
+            features=features,
+            targets=targets,
+            key_capacity=capacity,
+            candidate_capacity=config.fixed_candidate_capacity,
+            classes=config.classes,
+            seed=config.seed,
+            prefill_keys=True,
+        )
+        for capacity in config.key_capacities
+    ]
+    candidate_runs = [
+        _measure_managed_memory(
+            features=features,
+            targets=targets,
+            key_capacity=config.fixed_key_capacity,
+            candidate_capacity=capacity,
+            classes=config.classes,
+            seed=config.seed,
+            prefill_keys=False,
+        )
+        for capacity in config.candidate_capacities
+    ]
+    projected = [
+        {
+            "feature_width": width,
+            "key_capacity": capacity,
+            "candidate_capacity": config.fixed_candidate_capacity,
+            "projected_state_bytes": _projected_managed_memory_bytes(
+                width,
+                config.classes,
+                capacity,
+                config.fixed_candidate_capacity,
+            ),
+        }
+        for width in config.projected_widths
+        for capacity in config.projected_key_capacities
+    ]
+    return {
+        "experiment": "managed_memory_capacity_scaling",
+        "config": asdict(config),
+        "key_capacity_runs": key_runs,
+        "candidate_capacity_runs": candidate_runs,
+        "projected": projected,
+        "generated_stream_storage_bytes": features.nbytes + targets.nbytes,
+        "downloaded_data_bytes": 0,
+    }
+
+
 def run_scaling_experiment(
     image_config: BlankImageScalingConfig = BlankImageScalingConfig(),
     feature_config: FeatureWidthScalingConfig = FeatureWidthScalingConfig(),
+    memory_config: MemoryCapacityScalingConfig = MemoryCapacityScalingConfig(),
 ) -> dict[str, Any]:
     return {
         "experiment": "milestone_6_scaling",
         "blank_images": run_blank_image_scaling(image_config),
         "feature_widths": run_feature_width_scaling(feature_config),
+        "memory_capacities": run_memory_capacity_scaling(memory_config),
     }

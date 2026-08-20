@@ -23,6 +23,7 @@ from no_backprop.factor_free import FactorFreeMemoryConfig, run_factor_free_memo
 from no_backprop.scaling import (
     BlankImageScalingConfig,
     FeatureWidthScalingConfig,
+    MemoryCapacityScalingConfig,
     run_scaling_experiment,
 )
 
@@ -113,6 +114,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--feature-widths", type=int, nargs="+", default=[65, 129, 257, 513]
     )
     scaling.add_argument("--feature-updates", type=int, default=1_000)
+    scaling.add_argument("--memory-neurons", type=int, default=32)
+    scaling.add_argument("--memory-candidates", type=int, default=16)
+    scaling.add_argument(
+        "--key-capacities", type=int, nargs="+", default=[8, 16, 32, 64, 128]
+    )
+    scaling.add_argument(
+        "--candidate-capacities", type=int, nargs="+", default=[4, 8, 16, 32, 64]
+    )
+    scaling.add_argument("--capacity-updates", type=int, default=1_000)
     scaling.add_argument(
         "--kinds",
         nargs="+",
@@ -123,6 +133,7 @@ def build_parser() -> argparse.ArgumentParser:
             "block_rls",
             "prototype",
             "protected",
+            "managed_probation",
         ),
         default=[
             "lms",
@@ -131,6 +142,7 @@ def build_parser() -> argparse.ArgumentParser:
             "block_rls",
             "prototype",
             "protected",
+            "managed_probation",
         ],
     )
     scaling.add_argument("--seed", type=int, default=41)
@@ -231,14 +243,26 @@ def main(argv: list[str] | None = None) -> int:
                 sample_counts=tuple(args.sample_counts),
                 image_sizes=tuple(args.image_sizes),
                 hidden_size=args.hidden_size,
+                memory_neurons=args.memory_neurons,
+                memory_candidates=args.memory_candidates,
                 seed=args.seed,
                 kinds=tuple(args.kinds),
             ),
             FeatureWidthScalingConfig(
                 feature_widths=tuple(args.feature_widths),
                 updates=args.feature_updates,
+                memory_neurons=args.memory_neurons,
+                memory_candidates=args.memory_candidates,
                 seed=args.seed + 2,
                 kinds=tuple(args.kinds),
+            ),
+            MemoryCapacityScalingConfig(
+                key_capacities=tuple(args.key_capacities),
+                candidate_capacities=tuple(args.candidate_capacities),
+                fixed_key_capacity=args.memory_neurons,
+                fixed_candidate_capacity=args.memory_candidates,
+                updates=args.capacity_updates,
+                seed=args.seed + 6,
             ),
         )
         if args.output:

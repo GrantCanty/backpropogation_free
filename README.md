@@ -28,7 +28,8 @@ The experimental contract and milestone plan are in [PLAN.md](PLAN.md).
 - Multi-seed replication and ablations
 - Isolated truncated-BPTT systems baseline
 - JSON results and optional plots
-- Lazy 8x8/28x28 stream-length and feature-width scaling benchmarks
+- Lazy 8x8/28x28 stream-length, feature-width, and managed-memory capacity
+  scaling benchmarks
 
 All current data is generated or bundled locally and handled deterministically.
 Running the MVP does not download a dataset.
@@ -72,7 +73,22 @@ unchanged.
 The scale command does not allocate a 60,000-image dataset. It reuses one blank
 image while executing the full predict/learn path, which isolates learner state
 and runtime scaling. Its 28x28 case matches Fashion-MNIST's image dimensions and
-60,000-example training-set length without downloading Fashion-MNIST.
+60,000-example training-set length without downloading Fashion-MNIST. It also
+sweeps active-key and probationary-candidate bounds independently and projects
+the exact allocated state of wider managed-memory configurations without
+constructing them. `downloaded_data_bytes` is reported explicitly as zero.
+
+The managed-memory scaling run shows bounded state and nearly constant
+throughput as stream length grows. On the current CPU, the 60,000-image lazy run
+processed about 3,315 8x8 images/second and 1,070 28x28 images/second, using one
+512-byte or 6,272-byte blank image respectively. Increasing feature width from
+65 to 513 reduced readout throughput from about 7,170 to 585 updates/second and
+raised state from 107 KB to 2.50 MB. This is the expected cost of the exact dense
+RLS covariance, which remains quadratic in `(feature width + key capacity)`;
+top-k key activation alone does not make that update sparse. Candidate storage
+grows only linearly, although scanning a larger full candidate bank also reduces
+throughput. These figures are systems measurements on blank/generated inputs,
+not accuracy claims or a substitute for the later Fashion-MNIST experiment.
 
 The cumulative-memory command tests both factor-free branches. Every labeled
 observation updates cumulative statistics with unit weight, no raw image is
