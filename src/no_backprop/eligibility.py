@@ -141,6 +141,13 @@ class EligibilityReservoir(OnlineReservoir):
         scales = np.minimum(1.0, limit / np.maximum(norms, np.finfo(float).tiny))
         self.recurrent_weights *= scales
 
+    def reset_state(self) -> None:
+        """Reset transient activity and traces at an observable sequence boundary."""
+
+        super().reset_state()
+        self.recurrent_eligibility.fill(0.0)
+        self.input_eligibility.fill(0.0)
+
     @property
     def diagnostics(self) -> dict[str, float | int]:
         return {

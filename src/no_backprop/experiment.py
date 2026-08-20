@@ -12,6 +12,12 @@ from typing import Any, Literal
 import numpy as np
 
 from no_backprop.eligibility import EligibilityConfig, EligibilityReservoir
+from no_backprop.digits import (
+    DigitsSplit,
+    DigitsProtocol,
+    build_digits_segments,
+    load_digits_split,
+)
 from no_backprop.metrics import PrequentialMetrics
 from no_backprop.readouts import (
     FastSlowLMSReadout,
@@ -69,6 +75,25 @@ class ContinualExperimentConfig:
     readout_learning_rate: float = 0.16
     recurrent_learning_rate: float = 1e-4
     trace_decay: float = 0.9
+    surprise_threshold: float = 0.75
+    fast_decay: float = 0.995
+    consolidation_rate: float = 0.002
+
+
+@dataclass(frozen=True)
+class DigitsExperimentConfig:
+    """Single-pass continual classification on bundled 8x8 digit images."""
+
+    hidden_size: int = 64
+    test_per_class: int = 40
+    passes: int = 1
+    seed: int = 29
+    window: int = 100
+    lms_learning_rate: float = 0.18
+    rls_regularization: float = 1.0
+    rls_forgetting_factor: float = 0.999
+    recurrent_learning_rate: float = 5e-5
+    trace_decay: float = 0.88
     surprise_threshold: float = 0.75
     fast_decay: float = 0.995
     consolidation_rate: float = 0.002
@@ -373,6 +398,285 @@ def run_continual_experiment(config: ContinualExperimentConfig) -> dict[str, Any
         "models": {
             kind: run_continual_model(kind, config)
             for kind in ("fixed", "eligibility", "gated", "fast_slow")
+        },
+    }
+
+
+DigitsKind = Literal["frozen", "lms", "rls", "eligibility", "fast_slow"]
+
+
+def build_digits_learner(
+    kind: DigitsKind, config: DigitsExperimentConfig
+) -> OnlineReservoir:
+    """Build a row-sequence classifier for 8x8 images."""
+
+    reservoir_config = ReservoirConfig(
+        input_size=8,
+        hidden_size=config.hidden_size,
+        output_size=10,
+        spectral_radius=0.88,
+        input_scale=0.65,
+        leak_rate=0.7,
+        seed=config.seed,
+    )
+    feature_size = config.hidden_size + 1
+    if kind == "frozen":
+        readout = FrozenReadout(feature_size, 10, seed=config.seed)
+    elif kind == "rls":
+        readout = RLSReadout(
+            feature_size,
+            10,
+            seed=config.seed,
+            regularization=config.rls_regularization,
+            forgetting_factor=config.rls_forgetting_factor,
+        )
+    elif kind == "fast_slow":
+        readout = FastSlowLMSReadout(
+            feature_size,
+            10,
+            seed=config.seed,
+            learning_rate=config.lms_learning_rate,
+            fast_decay=config.fast_decay,
+            consolidation_rate=config.consolidation_rate,
+        )
+    else:
+        readout = LMSReadout(
+            feature_size,
+            10,
+            seed=config.seed,
+            learning_rate=config.lms_learning_rate,
+        )
+    if kind in ("eligibility", "fast_slow"):
+        threshold = config.surprise_threshold if kind == "fast_slow" else 0.0
+        return EligibilityReservoir(
+            reservoir_config,
+            readout,
+            EligibilityConfig(
+                trace_decay=config.trace_decay,
+                recurrent_learning_rate=config.recurrent_learning_rate,
+                input_learning_rate=config.recurrent_learning_rate * 0.5,
+                surprise_threshold=threshold,
+                seed=config.seed + 1,
+            ),
+        )
+    return OnlineReservoir(reservoir_config, readout)
+
+
+def _digit_target(label: int) -> np.ndarray:
+    target = np.zeros(10, dtype=np.float64)
+    target[label] = 1.0
+    return target
+
+
+def _process_digit_image(
+    learner: OnlineReservoir,
+    image: np.ndarray,
+    *,
+    target: np.ndarray | None,
+) -> np.ndarray:
+    """Process eight rows and optionally learn once from the final prediction."""
+
+    learner.reset_state()
+    no_feedback = np.full(10, np.nan, dtype=np.float64)
+    prediction = np.zeros(10, dtype=np.float64)
+    for row_index, row in enumerate(image):
+        prediction = learner.predict(row)
+        is_last_row = row_index == len(image) - 1
+        learner.learn(target if is_last_row and target is not None else no_feedback)
+    return prediction
+
+
+def _evaluate_digits(
+    learner: OnlineReservoir, images: np.ndarray, labels: np.ndarray
+) -> dict[str, Any]:
+    correct = np.zeros(len(labels), dtype=np.float64)
+    losses = np.zeros(len(labels), dtype=np.float64)
+    for index, (image, label) in enumerate(zip(images, labels)):
+        target = _digit_target(int(label))
+        prediction = _process_digit_image(learner, image, target=None)
+        correct[index] = float(np.argmax(prediction) == label)
+        losses[index] = float(np.mean(np.square(target - prediction)))
+    per_class = {
+        str(class_index): float(np.mean(correct[labels == class_index]))
+        for class_index in np.unique(labels)
+    }
+    return {
+        "accuracy": float(np.mean(correct)),
+        "mse": float(np.mean(losses)),
+        "worst_class_accuracy": float(min(per_class.values())),
+        "per_class_accuracy": per_class,
+    }
+
+
+def _digits_forgetting(history: list[dict[str, Any]]) -> dict[str, Any]:
+    """Measure loss from each class's best post-exposure score to final score."""
+
+    checkpoints = history[1:]
+    final = history[-1]["per_class_accuracy"]
+    per_class: dict[str, float] = {}
+    for class_key in final:
+        class_index = int(class_key)
+        eligible = [
+            item["per_class_accuracy"][class_key]
+            for item in checkpoints
+            if class_index in item["classes_seen"]
+        ]
+        peak = max(eligible) if eligible else final[class_key]
+        per_class[class_key] = float(max(0.0, peak - final[class_key]))
+    return {
+        "mean": float(np.mean(list(per_class.values()))),
+        "maximum": float(max(per_class.values())),
+        "per_class": per_class,
+    }
+
+
+def run_digits_model(
+    kind: DigitsKind,
+    protocol: DigitsProtocol,
+    config: DigitsExperimentConfig,
+    *,
+    split: DigitsSplit | None = None,
+) -> dict[str, Any]:
+    """Train and evaluate one learner on one online image ordering."""
+
+    data = split or load_digits_split(
+        test_per_class=config.test_per_class, seed=config.seed
+    )
+    segments = build_digits_segments(
+        data.train_labels,
+        protocol=protocol,
+        passes=config.passes,
+        seed=config.seed + 2,
+    )
+    learner = build_digits_learner(kind, config)
+    initial_state_bytes = learner.state_nbytes
+    training_correct: list[float] = []
+    training_losses: list[float] = []
+    segment_results: list[dict[str, Any]] = []
+    evaluation_history: list[dict[str, Any]] = []
+    classes_seen: set[int] = set()
+    trained_samples = 0
+    training_seconds = 0.0
+    evaluation_seconds = 0.0
+
+    started = time.perf_counter()
+    initial_evaluation = _evaluate_digits(
+        learner, data.test_images, data.test_labels
+    )
+    evaluation_seconds += time.perf_counter() - started
+    evaluation_history.append(
+        {
+            "trained_samples": 0,
+            "pass": -1,
+            "segment": -1,
+            "focus_class": None,
+            "classes_seen": [],
+            **initial_evaluation,
+        }
+    )
+
+    for segment in segments:
+        segment_correct: list[float] = []
+        segment_losses: list[float] = []
+        started = time.perf_counter()
+        for index in segment.indices:
+            label = int(data.train_labels[index])
+            target = _digit_target(label)
+            prediction = _process_digit_image(
+                learner, data.train_images[index], target=target
+            )
+            is_correct = float(np.argmax(prediction) == label)
+            loss = float(np.mean(np.square(target - prediction)))
+            segment_correct.append(is_correct)
+            segment_losses.append(loss)
+            training_correct.append(is_correct)
+            training_losses.append(loss)
+            classes_seen.add(label)
+            trained_samples += 1
+        training_seconds += time.perf_counter() - started
+
+        width = min(config.window, len(segment_correct))
+        segment_results.append(
+            {
+                "pass": segment.pass_index,
+                "segment": segment.segment_index,
+                "focus_class": segment.focus_class,
+                "samples": len(segment.indices),
+                "accuracy": float(np.mean(segment_correct)),
+                "head_accuracy": float(np.mean(segment_correct[:width])),
+                "tail_accuracy": float(np.mean(segment_correct[-width:])),
+                "mse": float(np.mean(segment_losses)),
+            }
+        )
+        started = time.perf_counter()
+        evaluation = _evaluate_digits(learner, data.test_images, data.test_labels)
+        evaluation_seconds += time.perf_counter() - started
+        evaluation_history.append(
+            {
+                "trained_samples": trained_samples,
+                "pass": segment.pass_index,
+                "segment": segment.segment_index,
+                "focus_class": segment.focus_class,
+                "classes_seen": sorted(classes_seen),
+                **evaluation,
+            }
+        )
+
+    final_evaluation = evaluation_history[-1]
+    width = min(config.window, len(training_correct))
+    result: dict[str, Any] = {
+        "model": kind,
+        "protocol": protocol,
+        "trained_samples": trained_samples,
+        "online_accuracy": float(np.mean(training_correct)),
+        "tail_online_accuracy": float(np.mean(training_correct[-width:])),
+        "online_mse": float(np.mean(training_losses)),
+        "initial_test_accuracy": initial_evaluation["accuracy"],
+        "final_test_accuracy": final_evaluation["accuracy"],
+        "final_test_mse": final_evaluation["mse"],
+        "final_worst_class_accuracy": final_evaluation["worst_class_accuracy"],
+        "forgetting": _digits_forgetting(evaluation_history),
+        "segments": segment_results,
+        "evaluation_history": evaluation_history,
+        "training_seconds": training_seconds,
+        "evaluation_seconds": evaluation_seconds,
+        "training_images_per_second": trained_samples / training_seconds,
+        "state_bytes_before": initial_state_bytes,
+        "state_bytes_after": learner.state_nbytes,
+        "bounded_state": initial_state_bytes == learner.state_nbytes,
+    }
+    if isinstance(learner, EligibilityReservoir):
+        result["diagnostics"] = learner.diagnostics
+    return result
+
+
+def run_digits_experiment(config: DigitsExperimentConfig) -> dict[str, Any]:
+    """Run matched shuffled and class-ordered 8x8 image benchmarks."""
+
+    split = load_digits_split(test_per_class=config.test_per_class, seed=config.seed)
+    kinds: tuple[DigitsKind, ...] = (
+        "frozen",
+        "lms",
+        "rls",
+        "eligibility",
+        "fast_slow",
+    )
+    return {
+        "experiment": "digits_8x8_continual_classification",
+        "config": asdict(config),
+        "dataset": {
+            "source": "sklearn.datasets.load_digits (bundled; no download)",
+            "image_shape": [8, 8],
+            "classes": 10,
+            "train_samples": len(split.train_labels),
+            "test_samples": len(split.test_labels),
+        },
+        "protocols": {
+            protocol: {
+                kind: run_digits_model(kind, protocol, config, split=split)
+                for kind in kinds
+            }
+            for protocol in ("shuffled", "class_ordered")
         },
     }
 

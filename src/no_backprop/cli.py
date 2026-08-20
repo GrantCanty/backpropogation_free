@@ -8,9 +8,11 @@ import json
 from no_backprop.experiment import (
     ContinualExperimentConfig,
     DelayedExperimentConfig,
+    DigitsExperimentConfig,
     SignalExperimentConfig,
     run_continual_experiment,
     run_delayed_experiment,
+    run_digits_experiment,
     run_signal_experiment,
     write_json_result,
 )
@@ -45,6 +47,14 @@ def build_parser() -> argparse.ArgumentParser:
     continual.add_argument("--hidden-size", type=int, default=48)
     continual.add_argument("--seed", type=int, default=17)
     continual.add_argument("--output", type=str)
+    digits = subparsers.add_parser(
+        "digits", help="run bundled 8x8 image benchmarks without a download"
+    )
+    digits.add_argument("--hidden-size", type=int, default=64)
+    digits.add_argument("--test-per-class", type=int, default=40)
+    digits.add_argument("--passes", type=int, default=1)
+    digits.add_argument("--seed", type=int, default=29)
+    digits.add_argument("--output", type=str)
     replicate = subparsers.add_parser(
         "replicate", help="run delayed and continual benchmarks across seeds"
     )
@@ -88,6 +98,17 @@ def main(argv: list[str] | None = None) -> int:
             seed=args.seed,
         )
         result = run_continual_experiment(config)
+        if args.output:
+            write_json_result(result, args.output)
+        print(json.dumps(result, indent=2, sort_keys=True))
+    elif args.command == "digits":
+        config = DigitsExperimentConfig(
+            hidden_size=args.hidden_size,
+            test_per_class=args.test_per_class,
+            passes=args.passes,
+            seed=args.seed,
+        )
+        result = run_digits_experiment(config)
         if args.output:
             write_json_result(result, args.output)
         print(json.dumps(result, indent=2, sort_keys=True))

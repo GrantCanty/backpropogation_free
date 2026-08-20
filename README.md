@@ -18,6 +18,8 @@ The experimental contract and milestone plan are in [PLAN.md](PLAN.md).
 - Explicit NumPy checkpoints
 - Nonstationary prediction, delayed association, and recurring-context
   classification benchmarks
+- Bundled 8x8 handwritten-digit benchmark with matched shuffled and
+  class-ordered streams
 - Multi-seed replication and ablations
 - Isolated truncated-BPTT systems baseline
 - JSON results and optional plots
@@ -32,6 +34,7 @@ python3 -m pytest
 PYTHONPATH=src python3 -m no_backprop signal --output results/signal.json
 PYTHONPATH=src python3 -m no_backprop delayed --output results/delayed.json
 PYTHONPATH=src python3 -m no_backprop continual --output results/continual.json
+PYTHONPATH=src python3 -m no_backprop digits --output results/digits.json
 PYTHONPATH=src python3 -m no_backprop replicate --output results/replication.json
 
 # Conventional comparison, kept outside the core package
@@ -44,6 +47,12 @@ PYTHONPATH=src python3 -m no_backprop plot \
 
 The commands use `PYTHONPATH=src` so the project can run without modifying the
 active Python environment. An editable installation is optional.
+
+The digits command uses `sklearn.datasets.load_digits`, which ships inside an
+existing scikit-learn installation. It does not access the network. Each image
+is presented as eight row-events, and its label is used once after the final
+row. The shuffled stream measures ordinary cumulative learning; the
+class-ordered stream measures adaptation and catastrophic forgetting.
 
 ## Architecture
 
@@ -72,6 +81,9 @@ The controlled MVP passes the five gates in `PLAN.md`:
 - tracked BPTT activation state grows with the unroll window
 - fast/slow consolidation modestly improves recurring-context retention while
   slightly reducing average accuracy
+- on bundled handwritten digits, RLS reaches about 91% held-out accuracy on a
+  shuffled one-pass stream and retains about 89% after class-ordered exposure;
+  LMS and the current fast/slow rule catastrophically forget the ordered stream
 
 These results validate the experimental machinery and the narrow MVP
 hypotheses. They do **not** establish an advantage on real-world data or prove
