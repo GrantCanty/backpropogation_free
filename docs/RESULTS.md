@@ -1008,6 +1008,82 @@ specific global surprise ranking does not pass the quality/cost gate. A next
 attempt should test spatially local residual structure or frozen predictive
 coordinates, rather than tune this scalar ranking post hoc.
 
+### Recurring-regime associative-memory capstone
+
+The memory capstone isolates the selected memory rule from representation
+changes. Every model receives the same fixed 64-coordinate signed-magnitude
+features and the same per-seed stream:
+
+```text
+original -> inversion -> translation -> center occlusion
+         -> original return -> inversion return
+```
+
+After every phase, all four domains are evaluated without learning. The primary
+metrics separate first-shift online adaptability, accuracy retained immediately
+before a recurring domain returns, online accuracy during that return, and
+final mean accuracy over all domains. Results use ten paired seeds, one label
+update per image, no raw replay, and fixed-size learner state.
+
+The expanded RLS factor curve shows the expected stability/plasticity exchange:
+
+| RLS factor | Approx. effective history | First-shift online | Pre-return | Return online | Final mean |
+|---:|---:|---:|---:|---:|---:|
+| 1.0 | all | 68.57% | **73.29%** | 79.77% | **77.51%** |
+| 0.99999 | 100,000 | 68.76% | 73.13% | 79.75% | 77.52% |
+| 0.9999 | 10,000 | 70.21% | 70.53% | 79.71% | 77.26% |
+| 0.999 | 1,000 | 80.10% | 45.06% | 84.35% | 58.71% |
+| 0.995 | 200 | **87.54%** | 31.06% | **89.61%** | 29.74% |
+| 0.99 | 100 | 86.42% | 23.04% | 67.72% | 25.85% |
+| 0.98 | 50 | 61.05% | 16.29% | 38.31% | 18.88% |
+| 0.95 | 20 | 17.67% | 10.53% | 20.14% | 11.20% |
+
+Factors through 0.995 initially buy responsiveness by heavily discounting older
+evidence. More aggressive factors become unstable and eventually lose both
+adaptability and retention; their high across-seed variation is retained rather
+than filtered from the result.
+
+All managed models use the same 16-slot probation bank. The capacity below is
+permanent mature-neuron capacity; therefore `Managed 32` is the previously
+selected Managed-16 architecture (32 mature plus 16 candidate slots).
+
+| Model | First-shift online | Pre-return | Return online | Final mean | State | Images/s |
+|---|---:|---:|---:|---:|---:|---:|
+| RLS factor 1 | 68.57% | 73.29% | 79.77% | 77.51% | 39.1 KB | 9,893 |
+| Immediate maturity 32 | 69.09% | 73.94% | 80.90% | 77.93% | 100.9 KB | 6,297 |
+| Managed 8 | 68.78% | 73.68% | 80.52% | 77.81% | 62.0 KB | 6,653 |
+| Managed 16 | 69.06% | 74.21% | 81.21% | 78.36% | 76.9 KB | 6,115 |
+| Managed 32 | 69.67% | 75.49% | 82.23% | 79.08% | 109.8 KB | 5,335 |
+| Managed 64 | **70.22%** | **75.84%** | **82.68%** | **80.36%** | 187.9 KB | 4,403 |
+
+Relative to factor-1 RLS, Managed 32 gains 1.10 ± 0.48 points first-shift,
+2.20 ± 1.67 pre-return, 2.46 ± 1.19 return-online, and 1.56 ± 0.50 final mean;
+these are paired means with nominal 95% Student-t half-widths, and all exclude
+zero. Probation itself matters: Managed 32 exceeds immediate maturity by 0.58 ±
+0.36, 1.55 ± 1.38, 1.34 ± 0.95, and 1.14 ± 0.36 points on those same metrics.
+
+The sharpest matched-adaptability comparison is Managed 64 against factor
+0.9999 RLS. Their first-shift online accuracies differ by only +0.005 ± 0.87
+points, while managed memory gains 5.31 ± 2.18 points pre-return, 2.97 ± 1.52
+return-online, and 3.10 ± 1.26 final mean. This places the associative memory
+above the observed RLS discount frontier rather than merely choosing a different
+point on it.
+
+Capacity is not free. Capacities 8 and 16 fill in every seed, on average during
+phases 1.4 and 2.3. Capacity 32 fills in nine of ten seeds and capacity 64 in
+five of ten. On return, Managed 32 reactivates on average 14.8 existing neurons
+for original images and 11.0 for inversion, while every previously mature center
+remains bitwise fixed. Managed 32 uses 2.81 times factor-1 RLS state and trains
+46% slower on this NumPy CPU; Managed 64 uses 4.80 times state and trains 55%
+slower.
+
+The result supports a narrow but useful claim: bounded probationary associative
+memory improves both responsiveness and recurring-domain retention over
+cumulative RLS without deliberately discounting any observation. It does not
+establish unbounded lifelong capacity, large-image scaling, or superiority to
+online backpropagation. Managed 32 is the balanced reference configuration;
+Managed 64 demonstrates the higher-cost quality frontier.
+
 ## Limitations and next decision
 
 - All tasks are synthetic and small.
@@ -1054,8 +1130,10 @@ coordinates, rather than tune this scalar ranking post hoc.
 - Fast-memory routing improves immediate ordered adaptation but still damages
   final retention, and does not beat cumulative RLS on the drift benchmark.
 - The maturity model preallocates 32 neuron slots. The fixed-key control uses a
-  hand-set RBF width; the adaptive variant still requires safety bounds and
-  computes entropy from uncalibrated scores.
+  hand-set RBF width; the capstone shows that 32 slots fill in nine of ten seeds,
+  while increasing capacity improves quality at quadratic-RLS state cost. The
+  adaptive variant still requires safety bounds and computes entropy from
+  uncalibrated scores.
 - The threshold-free leverage gate delays poor recruitment but still fills all
   32 slots, so it does not address long-run capacity allocation.
 - Probation improves online accuracy without improving final accuracy. Its
@@ -1077,8 +1155,8 @@ coordinates, rather than tune this scalar ranking post hoc.
   later; narrow locality currently protects those historical regions without
   replay, but does not provide a formal non-interference guarantee.
 
-The next mechanism experiment should retain the fixed signed-magnitude anchor
-while allowing predictive candidates to mature into frozen, append-only
-coordinates. This directly tests whether forward-only representation learning
-can improve translation and other residual shifts without invalidating older
-cumulative classifier statistics.
+The recurring-regime capstone is the finish line for this first bounded-memory
+project. It establishes a positive stability/plasticity result and measures its
+state and throughput cost. Larger datasets, mature-capacity expansion,
+self-supervised context discovery, recommendation, reinforcement learning, and
+online-backpropagation comparisons are separate follow-up scopes.

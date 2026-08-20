@@ -6,6 +6,8 @@ data; its checked-in default is in `digits_8x8.json`.
 The matched no-backprop/BPTT run is in `digits_systems_comparison.json`.
 Milestone 6 quality and forgetting-factor defaults are in `milestone6.json`;
 the lazy 8x8/28x28 systems benchmark is in `scaling.json`.
+The recurring-regime permanent-capacity and expanded RLS-factor capstone is in
+`memory_capstone.json`.
 The paired recurrent/pixel/fixed-convolution frontend study is in
 `frontends.json`.
 The forward-only masked latent-prediction study is in `predictive.json`.

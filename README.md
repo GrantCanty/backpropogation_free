@@ -48,6 +48,8 @@ PYTHONPATH=src python3 -m no_backprop delayed --output results/delayed.json
 PYTHONPATH=src python3 -m no_backprop continual --output results/continual.json
 PYTHONPATH=src python3 -m no_backprop digits --output results/digits.json
 PYTHONPATH=src python3 -m no_backprop memory --output results/milestone6.json
+PYTHONPATH=src python3 -m no_backprop memory-capstone \
+  --output results/memory-capstone.json
 PYTHONPATH=src python3 -m no_backprop cumulative-memory \
   --output results/cumulative-memory.json
 PYTHONPATH=src python3 -m no_backprop scale --output results/scaling.json
@@ -254,6 +256,14 @@ The controlled MVP passes the five gates in `PLAN.md`:
 - local fast values improve ordered online accuracy by 1.80 points but reduce
   final retention by 1.88; exact evidence-doubling consolidation increases the
   online gain to 2.21 points while worsening final loss to 3.28 points
+- in the six-phase recurring-regime capstone, the selected 32-mature/16-candidate
+  memory beats factor-1 RLS by 1.10 points on first-shift online accuracy, 2.20
+  points before old domains return, 2.46 points while relearning those domains,
+  and 1.56 points on final four-domain accuracy across 10 paired seeds
+- 64-neuron memory matches factor-0.9999 RLS first-shift adaptability to within
+  0.01 points while retaining 5.31 more points before return and finishing 3.10
+  points higher; this costs 4.8 times factor-1 RLS state and 55% lower NumPy CPU
+  throughput, making the quality/state frontier explicit rather than free
 
 These results validate the experimental machinery and the narrow MVP
 hypotheses. They do **not** establish an advantage on real-world data or prove
@@ -262,12 +272,10 @@ that local learning generally outperforms backpropagation. See
 
 ## Roadmap
 
-The `memory` branch now tests factor-free complementary, single-path maturity,
-adaptive key-value, and forward-only predictive representations, with
-signed-magnitude convolution established as the primary spatial baseline. The
-first JEPA-inspired experiment is not an I-JEPA reimplementation: a cumulative
-local predictor learns masked fixed-convolution targets without automatic
-differentiation or a backward pass. It establishes that target prediction can
-be learned online, but also exposes representation-basis drift as the next
-mechanism problem. Future predictive coordinates should be frozen, appended,
-or consolidated before the downstream cumulative statistics depend on them.
+The memory capstone closes the first small research project around a bounded,
+factor-free associative memory. The balanced reference configuration uses 32
+permanent frozen neurons, a managed 16-candidate probation bank, stable
+signed-magnitude features, and cumulative unit-weight statistics. Larger image
+datasets, recommendation, reinforcement learning, learned predictive
+coordinates, and accelerator work remain follow-up projects rather than
+requirements for this result.

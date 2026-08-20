@@ -20,6 +20,10 @@ from no_backprop.experiment import (
 from no_backprop.replication import ReplicationConfig, run_replication
 from no_backprop.plotting import load_result, plot_result
 from no_backprop.milestone6 import Milestone6Config, run_milestone6
+from no_backprop.memory_capstone import (
+    MemoryCapstoneConfig,
+    run_memory_capstone,
+)
 from no_backprop.factor_free import FactorFreeMemoryConfig, run_factor_free_memory
 from no_backprop.frontend_comparison import (
     FrontendComparisonConfig,
@@ -89,6 +93,27 @@ def build_parser() -> argparse.ArgumentParser:
         default=[1.0, 0.9999, 0.999, 0.99, 0.95],
     )
     memory.add_argument("--output", type=str)
+    memory_capstone = subparsers.add_parser(
+        "memory-capstone",
+        help="run recurring-regime memory capacity and RLS-factor study",
+    )
+    memory_capstone.add_argument(
+        "--seeds",
+        type=int,
+        nargs="+",
+        default=[3, 7, 11, 17, 23, 29, 37, 41, 47, 53],
+    )
+    memory_capstone.add_argument("--test-per-class", type=int, default=40)
+    memory_capstone.add_argument(
+        "--mature-capacities", type=int, nargs="+", default=[8, 16, 32, 64]
+    )
+    memory_capstone.add_argument(
+        "--forgetting-factors",
+        type=float,
+        nargs="+",
+        default=[1.0, 0.99999, 0.9999, 0.999, 0.995, 0.99, 0.98, 0.95],
+    )
+    memory_capstone.add_argument("--output", type=str)
     cumulative_memory = subparsers.add_parser(
         "cumulative-memory",
         help="run factor-free cumulative fast/slow memory experiments",
@@ -317,6 +342,18 @@ def main(argv: list[str] | None = None) -> int:
                 test_per_class=args.test_per_class,
                 seed=args.seed,
                 block_size=args.block_size,
+                forgetting_factors=tuple(args.forgetting_factors),
+            )
+        )
+        if args.output:
+            write_json_result(result, args.output)
+        print(json.dumps(result, indent=2, sort_keys=True))
+    elif args.command == "memory-capstone":
+        result = run_memory_capstone(
+            MemoryCapstoneConfig(
+                seeds=tuple(args.seeds),
+                test_per_class=args.test_per_class,
+                mature_capacities=tuple(args.mature_capacities),
                 forgetting_factors=tuple(args.forgetting_factors),
             )
         )
