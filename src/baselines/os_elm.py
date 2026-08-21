@@ -61,6 +61,14 @@ class OSELMFeatureMap:
     def state_nbytes(self) -> int:
         return sum(array.nbytes for array in self.persistent_arrays)
 
+    @property
+    def diagnostics(self) -> dict[str, object]:
+        return {
+            "algorithm": "dense_frozen_os_elm",
+            "representation": "dense_signed_gaussian_tanh",
+            "stored_raw_examples": 0,
+        }
+
 
 @dataclass
 class OnlineSequentialELMReadout:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from time import perf_counter
 import tracemalloc
 from typing import Any, Callable, Iterable
@@ -63,6 +63,32 @@ class FeatureSubsetAdapter:
             learner.update(  # type: ignore[attr-defined]
                 self._select(observation), target, prediction
             )
+
+
+@dataclass
+class FeatureMapAdapter:
+    """Inject a frozen representation before a readout."""
+
+    feature_map: object
+    transform_durations_ns: list[int] = field(default_factory=list)
+
+    def _transform(self, observation: FloatArray) -> FloatArray:
+        started = perf_counter()
+        features = self.feature_map.transform(observation)  # type: ignore[attr-defined]
+        self.transform_durations_ns.append(int((perf_counter() - started) * 1_000_000_000))
+        return features
+
+    def predict(self, learner: object, observation: FloatArray) -> FloatArray:
+        features = self._transform(observation)
+        return learner.predict(features)  # type: ignore[attr-defined]
+
+    def update(
+        self, learner: object, observation: FloatArray, target: FloatArray,
+        prediction: FloatArray, *, learn: bool,
+    ) -> None:
+        if learn:
+            features = self._transform(observation)
+            learner.update(features, target, prediction)  # type: ignore[attr-defined]
 
 
 @dataclass(frozen=True)
