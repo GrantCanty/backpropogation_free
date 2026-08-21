@@ -17,3 +17,14 @@ __all__ = [
     "build_digits_segments",
     "load_digits_split",
 ]
+from continual_core.datasets.classification import (
+    ClassificationSplit,
+    augment_image_split,
+    load_classification_split,
+)
+
+__all__ = [
+    "ClassificationSplit",
+    "augment_image_split",
+    "load_classification_split",
+]
