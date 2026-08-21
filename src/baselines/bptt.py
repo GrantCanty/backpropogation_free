@@ -11,7 +11,8 @@ import numpy as np
 import torch
 from torch import Tensor, nn
 
-from no_backprop.streams import iter_nonstationary_signal
+from baselines.torch_resources import module_nbytes, optimizer_nbytes
+from continual_core.streams import iter_nonstationary_signal
 
 
 @dataclass(frozen=True)
@@ -39,23 +40,6 @@ class TinyRNN(nn.Module):
             self.input_projection(observation) + self.recurrent_projection(state)
         )
         return self.readout(state), state
-
-
-def _tensor_bytes(tensor: Tensor) -> int:
-    return tensor.numel() * tensor.element_size()
-
-
-def _module_bytes(module: nn.Module) -> int:
-    return sum(_tensor_bytes(parameter) for parameter in module.parameters())
-
-
-def _optimizer_bytes(optimizer: torch.optim.Optimizer) -> int:
-    total = 0
-    for state in optimizer.state.values():
-        for value in state.values():
-            if isinstance(value, Tensor):
-                total += _tensor_bytes(value)
-    return total
 
 
 def _process_rss_bytes() -> int | None:
@@ -136,8 +120,8 @@ def run_bptt_signal(config: BPTTConfig) -> dict[str, Any]:
     rss_after = _process_rss_bytes()
     errors = np.asarray(squared_errors, dtype=np.float64)
     metric_window = min(100, len(errors))
-    model_bytes = _module_bytes(model)
-    optimizer_bytes = _optimizer_bytes(optimizer)
+    model_bytes = module_nbytes(model)
+    optimizer_bytes = optimizer_nbytes(optimizer)
     return {
         "model": "bptt",
         "config": asdict(config),

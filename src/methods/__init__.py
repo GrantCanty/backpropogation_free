@@ -1,0 +1,1 @@
+"""Replaceable research candidate methods."""

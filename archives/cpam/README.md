@@ -1,12 +1,13 @@
 # No-Backprop Continual Learning
 
-> **Archived research snapshot.** This directory contains the completed CPAM
-> research line and its preceding experiments. It is retained for reproduction
-> and comparison; new research is developed from the repository root.
+> **Archived research record.** This directory contains the completed CPAM
+> narrative, plans, and generated result artifacts. Reusable implementation,
+> baselines, configurations, and tests remain active at the repository root.
 >
-> Run archived tests from this directory with `python3 -m pytest`. Existing
-> experiment commands below also assume this directory is the working
-> directory.
+> Run tests and the historical experiment commands below from the repository
+> root. CPAM-specific implementation is retired within this archive without
+> copying or deleting shared infrastructure. See
+> [MANIFEST.md](MANIFEST.md) for the source commit and active file mapping.
 
 This repository investigates recurrent systems that predict, act, and update
 from a stream without automatic differentiation or backpropagation through

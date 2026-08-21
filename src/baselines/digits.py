@@ -10,8 +10,8 @@ import numpy as np
 import torch
 from torch import Tensor, nn
 
-from baselines.bptt import _module_bytes, _optimizer_bytes
-from no_backprop.digits import (
+from baselines.torch_resources import module_nbytes, optimizer_nbytes
+from continual_core.datasets.digits import (
     DigitsProtocol,
     DigitsSplit,
     augment_digits_split,
@@ -238,8 +238,8 @@ def run_bptt_digits(
         "training_seconds": training_seconds,
         "evaluation_seconds": evaluation_seconds,
         "training_images_per_second": trained_samples / training_seconds,
-        "model_bytes": _module_bytes(model),
-        "optimizer_bytes": _optimizer_bytes(optimizer),
+        "model_bytes": module_nbytes(model),
+        "optimizer_bytes": optimizer_nbytes(optimizer),
         "weights_locked_during_evaluation": all(
             item["weights_unchanged"] for item in evaluation_history
         ),
