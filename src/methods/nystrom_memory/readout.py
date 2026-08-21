@@ -69,7 +69,7 @@ class NystromCovarianceReadout:
         state; the online update path uses the structured Woodbury solve.
         """
         k = self.probe_covariance + self.epsilon * np.eye(self.rank)
-        low_rank = self.range_statistic @ np.linalg.solve(k, self.range_statistic.T)
+        low_rank = self.range_statistic @ self._stable_solve(k, self.range_statistic.T)
         diagonal = np.maximum(self.feature_diagonal - np.diag(low_rank), 0.0)
         covariance = low_rank
         covariance[np.diag_indices(self.input_size)] += diagonal + self.regularization
@@ -78,7 +78,7 @@ class NystromCovarianceReadout:
     def _solve_weights(self) -> None:
         # A = D + Y K^-1 Y.T, K = G + eps I.  Woodbury avoids a d x d solve.
         k = self.probe_covariance + self.epsilon * np.eye(self.rank)
-        k_inverse_y_t = np.linalg.solve(k, self.range_statistic.T)
+        k_inverse_y_t = self._stable_solve(k, self.range_statistic.T)
         diagonal_nystrom = np.sum(self.range_statistic * k_inverse_y_t.T, axis=1)
         diagonal = np.maximum(self.feature_diagonal - diagonal_nystrom, 0.0)
         diagonal += self.regularization
@@ -86,9 +86,27 @@ class NystromCovarianceReadout:
         d_inv_y = inv_d[:, None] * self.range_statistic
         small = k + self.range_statistic.T @ d_inv_y
         rhs = inv_d[:, None] * self.cross_target
-        correction = d_inv_y @ np.linalg.solve(small, self.range_statistic.T @ rhs)
+        correction = d_inv_y @ self._stable_solve(
+            small, self.range_statistic.T @ rhs
+        )
         solved = rhs - correction
         self.weights[...] = solved.T
+
+    @staticmethod
+    def _stable_solve(matrix: np.ndarray, right_hand_side: np.ndarray) -> np.ndarray:
+        """Solve a theoretically positive-definite system robustly at startup."""
+        matrix = 0.5 * (matrix + matrix.T)
+        scale = max(1.0, float(np.max(np.abs(np.diag(matrix)))))
+        jitter = np.finfo(np.float64).eps * scale
+        for _ in range(7):
+            try:
+                return np.linalg.solve(matrix, right_hand_side)
+            except np.linalg.LinAlgError:
+                matrix = matrix + jitter * np.eye(matrix.shape[0])
+                jitter *= 10.0
+        # This path is diagnostic insurance for exceptionally ill-conditioned
+        # streams; it remains bounded and does not retain any extra state.
+        return np.linalg.lstsq(matrix, right_hand_side, rcond=None)[0]
 
     def update(self, features: FloatArray, target: FloatArray, prediction: FloatArray) -> None:
         values = vector("features", features, self.input_size)
