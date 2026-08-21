@@ -1137,6 +1137,79 @@ that this forward-only design beats ordinary matched online Adam under the
 tested contract—not that backpropagation is inherently unsuitable for
 continual learning.
 
+### Closest analytic and constructive baselines
+
+The closest-prior-art audit identified four missing forward-only controls. They
+now use the same fixed signed-magnitude frontend, six-phase recurring stream,
+event order, one update per image, locked evaluation, and no raw replay as the
+capstone. Each method is preallocated to the largest structural capacity that
+fits under either Managed-32's 109,800-byte state ceiling or Managed-64's
+187,880-byte ceiling:
+
+- ALD kernel RLS admits sufficiently novel feature vectors to an RBF dictionary
+  and performs reduced KRLS updates when the dictionary is full; it never
+  evicts a mature dictionary element.
+- The direct-link Resource-Allocating Network fits a normalized-LMS linear/RBF
+  output and recruits fixed centers when both error and feature distance are
+  large.
+- fast-learning Fuzzy ARTMAP uses fixed complement coding, vigilance, and match
+  tracking to create label-consistent categories.
+- Online Sequential ELM uses fixed random tanh features and an event-wise
+  regularized RLS output update.
+
+Method parameters are selected at the smaller state ceiling on development
+seeds 2, 5, and 13 using the equal mean of the four displayed quality metrics.
+Those choices are frozen before paired evaluation on test seeds 3, 7, 11, 17,
+23, 29, 37, 41, 47, and 53. The selected parameters are KRLS width 0.2 and ALD
+tolerance 0.01; RAN learning rate 0.1, error threshold 0.75, and distance
+threshold 0.05; ARTMAP vigilance 0.5 and choice 0.001; and OS-ELM input scale
+1.0 and ridge regularization 1.0.
+
+| Model | Capacity | First-shift online | Pre-return | Return online | Final mean | State | Images/s |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| RLS factor 1 | — | 68.57% | 73.29% | 79.77% | 77.51% | 39.1 KB | **9,057** |
+| Managed 32 | 32 mature + 16 candidate | 69.67% | 75.49% | 82.23% | 79.08% | 109.8 KB | 5,099 |
+| ALD-KRLS, 32 budget | 66 vectors | 62.97% | 61.39% | 69.62% | 74.09% | 109.5 KB | 7,026 |
+| Fuzzy ARTMAP, 32 budget | 104 categories | 76.05% | 81.26% | **96.27%** | 79.31% | 109.2 KB | 5,048 |
+| OS-ELM, 32 budget | 84 hidden units | 73.12% | **82.19%** | 86.72% | **82.13%** | 109.1 KB | 7,267 |
+| RAN, 32 budget | 171 neurons | **78.51%** | 66.66% | 90.91% | 64.58% | 109.3 KB | 5,605 |
+| Managed 64 | 64 mature + 16 candidate | 70.22% | 75.84% | 82.68% | 80.36% | 187.9 KB | 4,124 |
+| ALD-KRLS, 64 budget | 91 vectors | 69.64% | 70.60% | 78.25% | 80.43% | 187.3 KB | 6,245 |
+| Fuzzy ARTMAP, 64 budget | 179 categories | 76.06% | 81.26% | 96.28% | 79.29% | 187.8 KB | 5,020 |
+| OS-ELM, 64 budget | 119 hidden units | 78.14% | **87.08%** | 90.41% | **86.27%** | 187.8 KB | 6,428 |
+| RAN, 64 budget | 300 neurons | **83.74%** | 86.55% | **98.27%** | 75.54% | 187.8 KB | 4,645 |
+
+OS-ELM is the strongest balanced baseline and changes the project's empirical
+conclusion. Relative to the state-matched Managed 32 model, OS-ELM-32 gains
+3.45 ± 1.37 points first-shift, 6.70 ± 1.46 pre-return, 4.48 ± 1.58 return-
+online, and 3.06 ± 1.24 final mean. At the larger budget, its gains over
+Managed 64 are 7.93 ± 1.55, 11.24 ± 2.09, 7.73 ± 1.96, and 5.91 ± 1.45 points.
+These are paired means with nominal 95% Student-t half-widths and all exclude
+zero.
+
+The other methods expose useful tradeoffs. Fuzzy ARTMAP-32 gains 14.03 ± 1.99
+points in return-online accuracy over Managed 32 while its final difference is
+only +0.23 ± 3.68 points. RAN-64 is the most plastic method, gaining 13.53 ±
+2.13 first-shift and 15.59 ± 2.46 return-online points over Managed 64, but it
+finishes 4.81 ± 1.86 points lower. ALD-KRLS-64 is statistically unresolved
+against Managed 64 on the four primary metrics and the smaller dictionary is
+clearly inadequate.
+
+Both KRLS dictionaries and both RANs fill their budgets; rejected admissions
+continue to update existing outputs. ARTMAP creates 100 categories in the
+inspected seed and therefore receives no benefit from its larger 179-category
+allocation. All state ceilings and locked-evaluation checks pass. CPU
+throughput is implementation-specific, but OS-ELM also processes more images
+per second than the corresponding managed model in this NumPy run.
+
+The defensible conclusion is no longer that CPAM is the best tested
+forward-only memory. A simpler fixed random representation with cumulative RLS
+is stronger on this small stationary-label transformation suite. CPAM remains
+interesting as an interpretable frozen-key/probation mechanism, but a paper
+claim now needs a setting where structural allocation provides something
+OS-ELM cannot, such as class growth, heterogeneous local novelty, strict
+capacity saturation, or a learned nonstationary representation.
+
 ## Limitations and next decision
 
 - All tasks are synthetic and small.
@@ -1178,6 +1251,13 @@ continual learning.
   can make some 8x8 digits intrinsically ambiguous.
 - RLS's strong retention uses quadratic state, so it is not yet a scalable
   answer to continual learning.
+- The closest-analytic comparison finds that state-matched OS-ELM dominates
+  CPAM on all four primary recurring-regime metrics. This substantially weakens
+  a general performance claim for CPAM on the current benchmark.
+- ALD-KRLS stores observed feature vectors, RAN stores recruited centers, and
+  Fuzzy ARTMAP stores learned category prototypes. They retain no raw images,
+  but their representation-state assumptions differ from fixed random OS-ELM
+  and should not be described as identical memory semantics.
 - Blank-image scaling validates systems behavior, not accuracy or numerical
   behavior on a diverse 60,000-image stream.
 - CPU throughput does not establish energy or accelerator efficiency.

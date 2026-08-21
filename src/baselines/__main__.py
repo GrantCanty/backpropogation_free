@@ -11,6 +11,10 @@ from baselines.compare import (
     run_digits_systems_comparison,
     run_systems_comparison,
 )
+from baselines.analytic_memory import (
+    AnalyticMemoryComparisonConfig,
+    run_analytic_memory_comparison,
+)
 from baselines.memory_backprop import (
     MemoryBackpropComparisonConfig,
     run_memory_backprop_comparison,
@@ -22,7 +26,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run conventional baseline comparisons")
     parser.add_argument(
         "--benchmark",
-        choices=("signal", "digits", "memory-capstone"),
+        choices=("signal", "digits", "memory-capstone", "analytic-memory"),
         default="signal",
     )
     parser.add_argument("--steps", type=int, default=3_000)
@@ -51,7 +55,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--output", type=str)
     args = parser.parse_args(argv)
-    if args.benchmark == "memory-capstone":
+    if args.benchmark == "analytic-memory":
+        result = run_analytic_memory_comparison(
+            AnalyticMemoryComparisonConfig(
+                test_seeds=tuple(args.test_seeds),
+                development_seeds=tuple(args.development_seeds),
+                test_per_class=args.test_per_class,
+            )
+        )
+    elif args.benchmark == "memory-capstone":
         result = run_memory_backprop_comparison(
             MemoryBackpropComparisonConfig(
                 test_seeds=tuple(args.test_seeds),

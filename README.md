@@ -71,6 +71,8 @@ PYTHONPATH=src python3 -m baselines --benchmark digits \
   --output results/digits-systems.json
 PYTHONPATH=src python3 -m baselines --benchmark memory-capstone \
   --output results/memory-backprop-comparison.json
+PYTHONPATH=src python3 -m baselines --benchmark analytic-memory \
+  --output results/analytic-memory-comparison.json
 
 # Optional local plots
 PYTHONPATH=src python3 -m no_backprop plot \
@@ -270,6 +272,10 @@ The controlled MVP passes the five gates in `PLAN.md`:
   adapts 5.83 points faster than Managed-32 but retains 30.71 fewer points before
   return and finishes 13.14 points lower; Managed-32 uses 5% less persistent
   state and processes about 1.9 times as many batch-one CPU updates
+- among state-matched forward-only prior-art controls, OS-ELM is the strongest
+  balanced method: at the 109.8 KB ceiling it exceeds Managed-32 by 3.45 points
+  first-shift, 6.70 pre-return, 4.48 return-online, and 3.06 final mean; RAN and
+  Fuzzy ARTMAP adapt still faster but expose clear retention tradeoffs
 
 These results validate the experimental machinery and the narrow MVP
 hypotheses. They do **not** establish an advantage on real-world data or prove
@@ -293,3 +299,9 @@ regimes without replay. This is evidence for the current design under a strict
 no-replay contract, not a claim that backpropagation is incompatible with
 continual learning or that specialized backprop-based continual methods cannot
 close the gap.
+
+The closest-analytic comparison is an important negative result for the current
+novelty claim: a simpler state-matched OS-ELM beats the managed memory on every
+primary recurring-regime metric. The next research stage should therefore seek
+a stream where structural recruitment has a specific measurable advantage,
+not claim general superiority from the current digits transformation suite.
