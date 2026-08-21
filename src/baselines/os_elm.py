@@ -10,6 +10,58 @@ from baselines._validation import positive, vector
 from continual_core.protocols import FloatArray
 
 
+@dataclass(frozen=True)
+class OSELMFeatureMap:
+    """Deterministic frozen random features used by OS-ELM.
+
+    The feature map is public so solver-comparison experiments can materialize
+    one representation once and give the exact same coordinates to every
+    output learner.  The final coordinate is a constant output bias.
+    """
+
+    input_size: int
+    hidden_size: int
+    seed: int = 0
+    input_scale: float = 0.5
+
+    def __post_init__(self) -> None:
+        if self.input_size <= 0 or self.hidden_size <= 0:
+            raise ValueError("all dimensions must be positive")
+        positive("input_scale", self.input_scale)
+        rng = np.random.default_rng(self.seed)
+        object.__setattr__(
+            self,
+            "hidden_weights",
+            rng.normal(
+                0.0,
+                self.input_scale / np.sqrt(self.input_size),
+                size=(self.hidden_size, self.input_size),
+            ),
+        )
+        object.__setattr__(
+            self,
+            "hidden_bias",
+            rng.uniform(-self.input_scale, self.input_scale, self.hidden_size),
+        )
+
+    @property
+    def output_size(self) -> int:
+        return self.hidden_size + 1
+
+    def transform(self, inputs: FloatArray) -> FloatArray:
+        inputs = vector("inputs", inputs, self.input_size)
+        hidden = np.tanh(self.hidden_weights @ inputs + self.hidden_bias)
+        return np.concatenate((hidden, np.ones(1, dtype=np.float64)))
+
+    @property
+    def persistent_arrays(self) -> tuple[np.ndarray, ...]:
+        return (self.hidden_weights, self.hidden_bias)
+
+    @property
+    def state_nbytes(self) -> int:
+        return sum(array.nbytes for array in self.persistent_arrays)
+
+
 @dataclass
 class OnlineSequentialELMReadout:
     """Online Sequential ELM with fixed random tanh features and RLS output.
@@ -31,15 +83,15 @@ class OnlineSequentialELMReadout:
             raise ValueError("all dimensions must be positive")
         positive("input_scale", self.input_scale)
         positive("regularization", self.regularization)
-        rng = np.random.default_rng(self.seed)
-        self.hidden_weights = rng.normal(
-            0.0,
-            self.input_scale / np.sqrt(self.input_size),
-            size=(self.hidden_size, self.input_size),
+        self.feature_map = OSELMFeatureMap(
+            input_size=self.input_size,
+            hidden_size=self.hidden_size,
+            seed=self.seed,
+            input_scale=self.input_scale,
         )
-        self.hidden_bias = rng.uniform(
-            -self.input_scale, self.input_scale, self.hidden_size
-        )
+        # Keep these public aliases for checkpoint and baseline compatibility.
+        self.hidden_weights = self.feature_map.hidden_weights
+        self.hidden_bias = self.feature_map.hidden_bias
         # One extra output-bias coordinate.
         width = self.hidden_size + 1
         self.weights = np.zeros((self.output_size, width), dtype=np.float64)
@@ -49,8 +101,7 @@ class OnlineSequentialELMReadout:
         self.sample_count = np.zeros(1, dtype=np.float64)
 
     def _features(self, inputs: FloatArray) -> FloatArray:
-        hidden = np.tanh(self.hidden_weights @ inputs + self.hidden_bias)
-        return np.concatenate((hidden, np.ones(1, dtype=np.float64)))
+        return self.feature_map.transform(inputs)
 
     def predict(self, features: FloatArray) -> FloatArray:
         features = vector("features", features, self.input_size)
@@ -98,4 +149,3 @@ class OnlineSequentialELMReadout:
             "stored_raw_images": 0,
             "stored_feature_vectors": 0,
         }
-

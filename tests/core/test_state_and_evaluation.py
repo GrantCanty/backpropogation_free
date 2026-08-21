@@ -4,6 +4,7 @@ import pytest
 from continual_core.evaluation import (
     DirectUpdateAdapter,
     evaluate_classification_locked,
+    train_classification_profiled,
     train_prequential,
 )
 from continual_core.protocols import ProtocolError
@@ -82,3 +83,26 @@ def test_locked_state_restores_transient_and_rejects_persistent_mutation() -> No
     with pytest.raises(ProtocolError, match="persistent state"):
         with locked_state(state):
             state.weight[0] = 3.0
+
+
+def test_profiled_evaluator_owns_checkpoints_and_resource_metrics() -> None:
+    learner = CumulativeLinearLearner()
+    events = [
+        (np.array([1.0, 0.0]), _target(0)),
+        (np.array([0.0, 1.0]), _target(1)),
+    ]
+    result = train_classification_profiled(
+        learner,
+        [events[:1], events[1:]],
+        DirectUpdateAdapter(),
+        {"all": ([event[0] for event in events], [0, 1])},
+        _target,
+        sample_efficiency_steps=(1, 2),
+    )
+    assert result["samples"] == 2
+    assert len(result["checkpoints"]) == 2
+    assert result["checkpoints"][-1]["evaluation_sets"]["all"][
+        "weights_unchanged"
+    ]
+    assert result["state_bytes_before"] == result["state_bytes_after"]
+    assert result["nonfinite_state_values"] == 0

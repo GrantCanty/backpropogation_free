@@ -10,6 +10,11 @@ from typing import Any, Mapping
 
 from continual_core.plotting import plot_result
 from continual_core.results import write_json_result
+from experiments.solver_comparison import (
+    SolverComparisonConfig,
+    run_solver_comparison,
+    write_solver_artifacts,
+)
 from experiments.streams import (
     ContinualExperimentConfig,
     DelayedExperimentConfig,
@@ -21,12 +26,16 @@ from experiments.streams import (
 
 
 ExperimentConfig = (
-    SignalExperimentConfig | DelayedExperimentConfig | ContinualExperimentConfig
+    SignalExperimentConfig
+    | DelayedExperimentConfig
+    | ContinualExperimentConfig
+    | SolverComparisonConfig
 )
 CONFIG_TYPES = {
     "signal": SignalExperimentConfig,
     "delayed": DelayedExperimentConfig,
     "continual": ContinualExperimentConfig,
+    "solver_comparison": SolverComparisonConfig,
 }
 
 
@@ -123,20 +132,34 @@ def main(argv: list[str] | None = None) -> int:
     if args.plot is not None and benchmark != "signal":
         parser.error("--plot is currently supported only for the signal benchmark")
 
-    if benchmark == "delayed":
+    if benchmark == "solver_comparison":
+        result = run_solver_comparison(config)  # type: ignore[arg-type]
+    elif benchmark == "delayed":
         result = run_delayed_experiment(config)
     elif benchmark == "continual":
         result = run_continual_experiment(config)
     else:
         result = run_signal_experiment(config)
-    if args.output is not None:
+    if args.output is not None and benchmark == "solver_comparison":
+        write_solver_artifacts(result, args.output)
+    elif args.output is not None:
         write_json_result(result, args.output)
     if args.plot is not None:
         try:
             plot_result(result, args.plot)
         except ValueError as error:
             parser.error(str(error))
-    print(json.dumps(result, indent=2, sort_keys=True))
+    displayed = (
+        {
+            "experiment": result["experiment"],
+            "selected_hyperparameters": result["selected_hyperparameters"],
+            "findings": result["findings"],
+            "artifacts": str(args.output) if args.output is not None else None,
+        }
+        if benchmark == "solver_comparison" and args.output is not None
+        else result
+    )
+    print(json.dumps(displayed, indent=2, sort_keys=True))
     return 0
 
 

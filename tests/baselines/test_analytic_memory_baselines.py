@@ -2,7 +2,7 @@ import numpy as np
 
 from baselines.artmap import FuzzyARTMAPReadout
 from baselines.kernel_rls import ALDKernelRLSReadout
-from baselines.os_elm import OnlineSequentialELMReadout
+from baselines.os_elm import OSELMFeatureMap, OnlineSequentialELMReadout
 from baselines.ran import ResourceAllocatingNetworkReadout
 
 
@@ -29,6 +29,43 @@ def test_os_elm_is_deterministic_bounded_and_learns() -> None:
     after = first.predict(features)
     assert after[1] > before[1]
     assert first.state_nbytes == state
+
+
+def test_public_os_elm_feature_map_matches_integrated_baseline() -> None:
+    readout = OnlineSequentialELMReadout(3, 2, hidden_size=8, seed=7)
+    feature_map = OSELMFeatureMap(3, 8, seed=7)
+    observation = np.array([0.2, -0.1, 1.0])
+    assert np.array_equal(
+        feature_map.transform(observation), readout._features(observation)
+    )
+
+
+def test_integrated_os_elm_matches_public_features_plus_exact_rls() -> None:
+    from baselines.rls import RLSReadout
+
+    integrated = OnlineSequentialELMReadout(
+        3, 2, hidden_size=5, seed=13, regularization=0.7
+    )
+    feature_map = OSELMFeatureMap(3, 5, seed=13)
+    solver = RLSReadout(
+        6, 2, regularization=0.7, forgetting_factor=1.0
+    )
+    rng = np.random.default_rng(17)
+    for _ in range(10):
+        observation = rng.normal(size=3)
+        target_value = rng.normal(size=2)
+        integrated_prediction = integrated.predict(observation)
+        expanded = feature_map.transform(observation)
+        solver_prediction = solver.predict(expanded)
+        assert np.allclose(integrated_prediction, solver_prediction, atol=1e-12)
+        integrated.update(observation, target_value, integrated_prediction)
+        solver.update(expanded, target_value, solver_prediction)
+    assert np.allclose(integrated.weights, solver.weights, atol=1e-11)
+    assert np.allclose(
+        integrated.inverse_correlation,
+        solver.inverse_correlation,
+        atol=1e-11,
+    )
 
 
 def test_ald_krls_expands_then_uses_reduced_updates_at_budget() -> None:

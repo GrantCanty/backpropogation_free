@@ -5,6 +5,7 @@ from baselines.fast_slow import ProtectedFastSlowReadout
 from baselines.lms import LMSReadout
 from baselines.prototype import PrototypeReadout
 from baselines.rls import BlockRLSReadout, DiagonalRLSReadout, RLSReadout
+from baselines.rpls import RecursivePLSReadout
 
 
 @pytest.mark.parametrize(
@@ -49,6 +50,40 @@ def test_rls_approximations_reduce_auxiliary_state() -> None:
     diagonal = DiagonalRLSReadout(17, 3)
     blocked = BlockRLSReadout(17, 3, block_size=4)
     assert diagonal.state_nbytes < blocked.state_nbytes < exact.state_nbytes
+
+
+def test_one_block_rls_matches_exact_factor_one_rls() -> None:
+    exact = RLSReadout(4, 2, regularization=0.7, forgetting_factor=1.0)
+    blocked = BlockRLSReadout(
+        4, 2, regularization=0.7, forgetting_factor=1.0, block_size=4
+    )
+    rng = np.random.default_rng(3)
+    for _ in range(12):
+        features = rng.normal(size=4)
+        target = rng.normal(size=2)
+        for readout in (exact, blocked):
+            prediction = readout.predict(features)
+            readout.update(features, target, prediction)
+    assert np.allclose(blocked.weights, exact.weights, atol=1e-11)
+    assert np.allclose(
+        blocked.inverse_blocks[0], exact.inverse_correlation, atol=1e-11
+    )
+
+
+def test_full_component_rpls_matches_batch_ridge() -> None:
+    rng = np.random.default_rng(11)
+    features = rng.normal(size=(16, 4))
+    targets = rng.normal(size=(16, 2))
+    readout = RecursivePLSReadout(
+        4, 2, components=4, regularization=0.8
+    )
+    for observation, target_value in zip(features, targets):
+        prediction = readout.predict(observation)
+        readout.update(observation, target_value, prediction)
+    expected = np.linalg.solve(
+        features.T @ features + 0.8 * np.eye(4), features.T @ targets
+    ).T
+    assert np.allclose(readout.weights, expected, atol=1e-9)
 
 
 def test_prototype_memory_retains_separately_observed_classes() -> None:
