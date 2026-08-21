@@ -1,6 +1,16 @@
 import json
 
-from scripts.run_solver_campaign import main
+from scripts.run_solver_campaign import DEFAULT_REFERENCE, build_parser, main
+
+
+def test_default_reference_is_independent_of_working_directory(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    args = build_parser().parse_args([])
+
+    assert args.reference_results == DEFAULT_REFERENCE
+    assert args.reference_results.is_file()
 
 
 def test_width_campaign_accepts_dataset_argument_and_writes_manifest(

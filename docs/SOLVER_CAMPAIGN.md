@@ -10,9 +10,10 @@ shared evaluator:
 
 The confirmatory comparison contains full exact RLS, memory-matched smaller
 exact RLS, and Frequent-Directions ridge. Hyperparameters are read from an
-existing development/held-out result and frozen. The report includes a paired
-bootstrap interval for smaller-minus-full final accuracy and evaluates a
-predeclared equivalence margin of one percentage point by default.
+included frozen reference at `configs/solver_campaign_reference.json`; the
+large generated result file is not required on a cloud machine. The report
+includes a paired bootstrap interval for smaller-minus-full final accuracy and
+evaluates a predeclared equivalence margin of one percentage point by default.
 
 ## Dataset arguments
 

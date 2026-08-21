@@ -28,6 +28,8 @@ CORE_METHODS = (
     "fd_ridge",
     "memory_matched_exact_rls",
 )
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_REFERENCE = REPOSITORY_ROOT / "configs" / "solver_campaign_reference.json"
 
 
 def _seed_set(count: int, *, master_seed: int, excluded: set[int]) -> tuple[int, ...]:
@@ -43,7 +45,13 @@ def _seed_set(count: int, *, master_seed: int, excluded: set[int]) -> tuple[int,
 
 
 def _reference(path: Path) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
-    document = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as error:
+        raise FileNotFoundError(
+            f"frozen reference configuration not found at {path}; provide "
+            "--reference-results with an existing comparison or reference file"
+        ) from error
     selected = document.get("selected_hyperparameters")
     config = document.get("config")
     if not isinstance(selected, dict) or not isinstance(config, dict):
@@ -245,7 +253,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--reference-results",
         type=Path,
-        default=Path("results/solver_comparison/comparison.json"),
+        default=DEFAULT_REFERENCE,
     )
     parser.add_argument("--output", type=Path, default=Path("results/solver_campaign"))
     parser.add_argument("--confirm-seeds", type=int, default=50)

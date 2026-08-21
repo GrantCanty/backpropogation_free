@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "source_experiment": "results/solver_comparison/comparison.json",
+  "selection_protocol": {
+    "dataset": "digits",
+    "development_seeds": [11, 23],
+    "heldout_seeds": [101, 211, 307, 401, 503],
+    "selection_score": "mean of equal-weight online and final locked accuracy",
+    "frozen_for_campaign": true
+  },
+  "config": {
+    "hidden_size": 64,
+    "test_per_class": 40,
+    "augmentation_copies": 1,
+    "augmentation_max_shift": 1,
+    "augmentation_noise_std": 0.03,
+    "development_seeds": [11, 23],
+    "heldout_seeds": [101, 211, 307, 401, 503]
+  },
+  "selected_hyperparameters": {
+    "block_rls": {
+      "block_size": 16,
+      "regularization": 1.0
+    },
+    "diagonal_rls": {
+      "regularization": 1.0
+    },
+    "exact_rls": {
+      "regularization": 0.1
+    },
+    "fd_ridge": {
+      "regularization": 10.0,
+      "sketch_rank": 16
+    },
+    "lms": {
+      "learning_rate": 0.3
+    },
+    "rpls": {
+      "components": 16,
+      "regularization": 0.1
+    }
+  }
+}
