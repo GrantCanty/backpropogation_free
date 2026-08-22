@@ -24,6 +24,9 @@ from experiments.projection_memory_study import (
 )
 
 
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+
+
 def _ints(value: str) -> tuple[int, ...]:
     values = tuple(int(item) for item in value.split(",") if item.strip())
     if not values:
@@ -107,6 +110,10 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         rank = args.nystrom_rank
 
     output = Path(args.output)
+    if not output.is_absolute():
+        output = REPOSITORY_ROOT / output
+    output = output.resolve()
+    print(f"writing artifacts to {output}", flush=True)
     all_results: list[dict[str, Any]] = []
     for width in widths:
         for protocol in args.protocols:
