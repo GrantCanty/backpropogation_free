@@ -304,6 +304,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 progress=lambda message, w=width, p=protocol: print(
                     f"width={w} protocol={p} {message}", flush=True
                 ),
+                protocol=protocol,
+                timing_session_id=args.timing_session_id,
+                rotate_condition_order=not args.fixed_condition_order,
             )
             references = _reference_runs(reference, width, protocol, tuple(seeds))
             studies.append(
@@ -343,7 +346,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dataset-path", type=Path)
     parser.add_argument("--dataset-cache", type=Path)
     parser.add_argument("--allow-download", action="store_true")
-    parser.add_argument("--output", type=Path, default=Path("results/sparse_nystrom_rank_sweep"))
+    parser.add_argument("--output", type=Path, default=Path("results/nystrom_rank_sweep"))
     parser.add_argument("--reference-results", type=Path, default=Path("results/projection_memory"))
     parser.add_argument("--widths", type=_ints, default=(1024,))
     parser.add_argument("--ranks", type=_ints, default=(64, 96, 128, 192, 256))
@@ -356,6 +359,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--augmentation-noise-std", type=float, default=0.03)
     parser.add_argument("--sparse-fan-in", type=int, default=8)
     parser.add_argument("--no-resume", action="store_true")
+    parser.add_argument("--timing-session-id")
+    parser.add_argument("--fixed-condition-order", action="store_true")
     parser.add_argument("--smoke", action="store_true")
     parser.add_argument("--smoke-seed", type=int, default=7)
     return parser

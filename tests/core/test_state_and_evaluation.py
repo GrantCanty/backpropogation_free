@@ -106,3 +106,8 @@ def test_profiled_evaluator_owns_checkpoints_and_resource_metrics() -> None:
     ]
     assert result["state_bytes_before"] == result["state_bytes_after"]
     assert result["nonfinite_state_values"] == 0
+    assert result["event_latency"]["median_microseconds"] >= 0.0
+    assert result["stream_samples_per_second"] > 0.0
+    assert result["checkpoint_and_evaluator_seconds"] >= 0.0
+    assert result["segments"][0]["focus_class"] == 0
+    assert "events_to_90pct_tail_accuracy" in result["segments"][0]

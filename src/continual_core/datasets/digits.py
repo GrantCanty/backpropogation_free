@@ -13,6 +13,7 @@ DigitsProtocol = Literal[
     "shuffled_repeated",
     "shuffled_augmented",
     "class_ordered",
+    "class_recurring",
 ]
 
 __all__ = [
@@ -146,9 +147,11 @@ def build_digits_segments(
 ) -> list[DigitsSegment]:
     """Build shuffled or class-ordered segments over a fixed training split.
 
-    Both protocols contain every training example exactly once per pass. The
+    Ordinary protocols contain every training example exactly once per pass. The
     shuffled stream is divided into ten checkpoint segments; the class-ordered
     stream has one segment per class and is shuffled only within each class.
+    ``class_recurring`` partitions each class into disjoint visits, exposing
+    recurrence without replaying an observation.
     """
 
     labels = np.asarray(labels, dtype=np.int64)
@@ -159,6 +162,7 @@ def build_digits_segments(
         "shuffled_repeated",
         "shuffled_augmented",
         "class_ordered",
+        "class_recurring",
     ):
         raise ValueError(f"unknown digits protocol: {protocol}")
     if passes <= 0:
@@ -168,6 +172,28 @@ def build_digits_segments(
     rng = np.random.default_rng(seed)
     segments: list[DigitsSegment] = []
     segment_index = 0
+    if protocol == "class_recurring":
+        if passes < 2:
+            raise ValueError("class_recurring requires at least two passes")
+        visits = {
+            int(class_index): np.array_split(
+                rng.permutation(np.flatnonzero(labels == class_index)), passes
+            )
+            for class_index in classes
+        }
+        for pass_index in range(passes):
+            for class_index in classes:
+                indices = visits[int(class_index)][pass_index]
+                segments.append(
+                    DigitsSegment(
+                        pass_index=pass_index,
+                        segment_index=segment_index,
+                        focus_class=int(class_index),
+                        indices=np.asarray(indices, dtype=np.int64),
+                    )
+                )
+                segment_index += 1
+        return segments
     for pass_index in range(passes):
         if protocol in ("shuffled", "shuffled_repeated", "shuffled_augmented"):
             chunks = np.array_split(rng.permutation(len(labels)), len(classes))

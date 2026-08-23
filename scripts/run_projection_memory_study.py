@@ -11,7 +11,16 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import sys
 from typing import Any
+
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+for directory in (REPOSITORY_ROOT, REPOSITORY_ROOT / "src"):
+    value = str(directory)
+    if value not in sys.path:
+        sys.path.insert(0, value)
+
 from continual_core.results import write_json_result
 from experiments.projection_memory_study import (
     ProjectionMemoryConfig,
@@ -20,13 +29,20 @@ from experiments.projection_memory_study import (
 )
 
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-
-
 def _ints(value: str) -> tuple[int, ...]:
     values = tuple(int(item) for item in value.split(",") if item.strip())
     if not values:
         raise argparse.ArgumentTypeError("expected at least one integer")
+    return values
+
+
+def _strings(value: str) -> tuple[str, ...]:
+    values = tuple(item.strip() for item in value.split(",") if item.strip())
+    permitted = {"shuffled_augmented", "class_ordered", "class_recurring"}
+    if not values or not set(values) <= permitted:
+        raise argparse.ArgumentTypeError(
+            "protocols must be shuffled_augmented, class_ordered, or class_recurring"
+        )
     return values
 
 
@@ -45,10 +61,12 @@ def _build_problem(args: argparse.Namespace, seed: int, protocol: str,
         augmentation_copies=args.augmentation_copies,
         augmentation_max_shift=args.augmentation_max_shift,
         augmentation_noise_std=args.augmentation_noise_std,
+        recurring_visits=args.recurring_visits,
     )
     config = ProjectionMemoryConfig(
         input_size=input_size,
         hidden_size=width,
+        regularization=args.exact_regularization,
         fan_ins=tuple(args.fan_ins),
         ranks=tuple(args.ranks),
         development_seeds=(seed,),
@@ -95,8 +113,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             conditions = {
                 "dense_exact": {"feature_kind": "dense", "readout_kind": "exact"},
                 "sparse_exact": {"feature_kind": "sparse", "readout_kind": "exact", "fan_in": min(fan_in, config.input_size)},
-                "dense_nystrom": {"feature_kind": "dense", "readout_kind": "nystrom", "rank": min(rank, width + 1)},
-                "sparse_nystrom": {"feature_kind": "sparse", "readout_kind": "nystrom", "fan_in": min(fan_in, config.input_size), "rank": min(rank, width + 1)},
+                "dense_nystrom": {"feature_kind": "dense", "readout_kind": "nystrom", "rank": min(rank, width + 1), "regularization": args.nystrom_regularization},
+                "sparse_nystrom": {"feature_kind": "sparse", "readout_kind": "nystrom", "fan_in": min(fan_in, config.input_size), "rank": min(rank, width + 1), "regularization": args.nystrom_regularization},
             }
             destination = output / f"width_{width}" / protocol
             result = run_projection_memory_study(
@@ -107,6 +125,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 evaluation_by_seed=evaluation_by_seed,
                 output=destination,
                 resume=not args.no_resume,
+                protocol=protocol,
+                timing_session_id=args.timing_session_id,
+                rotate_condition_order=not args.fixed_condition_order,
             )
             all_results.append(result)
             print(f"completed width={width} protocol={protocol} seeds={len(seeds)}", flush=True)
@@ -125,10 +146,17 @@ def parser() -> argparse.ArgumentParser:
     parser.add_argument("--output", type=Path, default=Path("results/projection_memory"))
     parser.add_argument("--smoke", action="store_true", help="small local digits run")
     parser.add_argument("--no-resume", action="store_true")
+    parser.add_argument("--timing-session-id")
+    parser.add_argument("--fixed-condition-order", action="store_true")
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--seeds", type=_ints, default=tuple(range(100, 120)))
     parser.add_argument("--widths", type=_ints, default=(64, 128, 256))
-    parser.add_argument("--protocols", type=_ints, default=None, help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--protocols",
+        type=_strings,
+        default=("shuffled_augmented", "class_ordered"),
+    )
+    parser.add_argument("--recurring-visits", type=int, default=2)
     parser.add_argument("--train-events-per-segment", type=int, default=1000)
     parser.add_argument("--test-per-class", type=int, default=100)
     parser.add_argument("--augmentation-copies", type=int, default=1)
@@ -136,6 +164,8 @@ def parser() -> argparse.ArgumentParser:
     parser.add_argument("--augmentation-noise-std", type=float, default=0.03)
     parser.add_argument("--sparse-fan-in", type=int, default=8)
     parser.add_argument("--nystrom-rank", type=int, default=32)
+    parser.add_argument("--nystrom-regularization", type=float, default=1.0)
+    parser.add_argument("--exact-regularization", type=float, default=1.0)
     parser.add_argument("--fan-ins", type=_ints, default=(4, 8, 16, 32))
     parser.add_argument("--ranks", type=_ints, default=(8, 16, 32, 64))
     return parser
@@ -143,7 +173,6 @@ def parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
-    args.protocols = ("shuffled_augmented", "class_ordered")
     if args.dataset == "npz" and args.dataset_path is None:
         raise SystemExit("--dataset-path is required for --dataset npz")
     run(args)
