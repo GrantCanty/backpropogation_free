@@ -12,14 +12,10 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 from typing import Any
-
-import numpy as np
-
-from continual_core.datasets.classification import augment_image_split, load_classification_split
-from continual_core.datasets.digits import build_digits_segments
 from continual_core.results import write_json_result
 from experiments.projection_memory_study import (
     ProjectionMemoryConfig,
+    materialize_projection_problem,
     run_projection_memory_study,
 )
 
@@ -37,60 +33,28 @@ def _ints(value: str) -> tuple[int, ...]:
 def _build_problem(args: argparse.Namespace, seed: int, protocol: str,
                    width: int, events_per_segment: int,
                    test_per_class: int) -> tuple[ProjectionMemoryConfig, dict[int, Any], dict[int, Any]]:
-    split = load_classification_split(
-        args.dataset,
-        test_per_class=test_per_class,
+    segments, evaluation, input_size = materialize_projection_problem(
+        dataset=args.dataset,
         seed=seed,
+        protocol=protocol,
+        events_per_segment=events_per_segment,
+        test_per_class=test_per_class,
         dataset_path=args.dataset_path,
         allow_download=args.allow_download,
-        cache_directory=args.dataset_cache,
+        dataset_cache=args.dataset_cache,
+        augmentation_copies=args.augmentation_copies,
+        augmentation_max_shift=args.augmentation_max_shift,
+        augmentation_noise_std=args.augmentation_noise_std,
     )
-    split = augment_image_split(
-        split,
-        copies=args.augmentation_copies,
-        max_shift=args.augmentation_max_shift,
-        noise_std=args.augmentation_noise_std,
-        seed=seed + 10_000,
-    )
-    stream = build_digits_segments(
-        split.train_labels,
-        protocol=protocol,  # type: ignore[arg-type]
-        seed=seed + 20_000,
-    )
-    selected: list[np.ndarray] = []
-    for segment in stream:
-        selected.append(segment.indices[:events_per_segment])
-    selected_indices = np.unique(np.concatenate(selected))
-    observations = split.train_images.reshape(len(split.train_images), -1)
-    targets = split.train_labels.astype(int)
-    segments = {
-        seed: [
-            [
-                (observations[int(index)], np.eye(len(np.unique(targets)))[targets[int(index)]])
-                for index in indices
-            ]
-            for indices in selected
-        ]
-    }
-    test_observations = split.test_images.reshape(len(split.test_images), -1)
-    evaluation: dict[str, Any] = {
-        "all": (list(test_observations), split.test_labels.astype(int).tolist())
-    }
-    for label in np.unique(split.test_labels):
-        indices = np.flatnonzero(split.test_labels == label)
-        evaluation[f"class_{int(label)}"] = (
-            [test_observations[int(index)] for index in indices],
-            [int(label)] * len(indices),
-        )
     config = ProjectionMemoryConfig(
-        input_size=int(observations.shape[1]),
+        input_size=input_size,
         hidden_size=width,
         fan_ins=tuple(args.fan_ins),
         ranks=tuple(args.ranks),
         development_seeds=(seed,),
         confirmatory_seeds=tuple(),
     )
-    return config, segments, {seed: evaluation}
+    return config, {seed: segments}, {seed: evaluation}
 
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
@@ -131,8 +95,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             conditions = {
                 "dense_exact": {"feature_kind": "dense", "readout_kind": "exact"},
                 "sparse_exact": {"feature_kind": "sparse", "readout_kind": "exact", "fan_in": min(fan_in, config.input_size)},
-                "dense_nystrom": {"feature_kind": "dense", "readout_kind": "nystrom", "rank": rank},
-                "sparse_nystrom": {"feature_kind": "sparse", "readout_kind": "nystrom", "fan_in": min(fan_in, config.input_size), "rank": rank},
+                "dense_nystrom": {"feature_kind": "dense", "readout_kind": "nystrom", "rank": min(rank, width + 1)},
+                "sparse_nystrom": {"feature_kind": "sparse", "readout_kind": "nystrom", "fan_in": min(fan_in, config.input_size), "rank": min(rank, width + 1)},
             }
             destination = output / f"width_{width}" / protocol
             result = run_projection_memory_study(

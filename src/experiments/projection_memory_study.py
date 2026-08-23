@@ -17,6 +17,11 @@ import numpy as np
 
 from baselines.os_elm import OSELMFeatureMap
 from baselines.rls import RLSReadout
+from continual_core.datasets.classification import (
+    augment_image_split,
+    load_classification_split,
+)
+from continual_core.datasets.digits import build_digits_segments
 from continual_core.evaluation import FeatureMapAdapter, train_classification_profiled
 from continual_core.protocols import FloatArray
 from continual_core.results import artifact_matches, write_json_result
@@ -48,6 +53,74 @@ class ProjectionMemoryConfig:
             raise ValueError("fan-ins must be in [1, input_size]")
         if any(rank <= 0 for rank in self.ranks):
             raise ValueError("ranks must be positive")
+
+
+def materialize_projection_problem(
+    *,
+    dataset: str,
+    seed: int,
+    protocol: str,
+    events_per_segment: int,
+    test_per_class: int,
+    dataset_path: str | Path | None = None,
+    allow_download: bool = False,
+    dataset_cache: str | Path | None = None,
+    augmentation_copies: int = 1,
+    augmentation_max_shift: int = 1,
+    augmentation_noise_std: float = 0.03,
+) -> tuple[
+    list[list[tuple[FloatArray, FloatArray]]],
+    dict[str, tuple[list[FloatArray], list[Any]]],
+    int,
+]:
+    """Build one public, method-neutral raw classification problem."""
+
+    split = load_classification_split(
+        dataset,
+        test_per_class=test_per_class,
+        seed=seed,
+        dataset_path=dataset_path,
+        allow_download=allow_download,
+        cache_directory=dataset_cache,
+    )
+    split = augment_image_split(
+        split,
+        copies=augmentation_copies,
+        max_shift=augmentation_max_shift,
+        noise_std=augmentation_noise_std,
+        seed=seed + 10_000,
+    )
+    stream = build_digits_segments(
+        split.train_labels,
+        protocol=protocol,  # type: ignore[arg-type]
+        seed=seed + 20_000,
+    )
+    selected = [segment.indices[:events_per_segment] for segment in stream]
+    observations = split.train_images.reshape(len(split.train_images), -1)
+    labels = split.train_labels.astype(int)
+    classes = len(np.unique(labels))
+    identity = np.eye(classes, dtype=np.float64)
+    segments = [
+        [
+            (observations[int(index)], identity[labels[int(index)]])
+            for index in indices
+        ]
+        for indices in selected
+    ]
+    test_observations = split.test_images.reshape(len(split.test_images), -1)
+    evaluation: dict[str, tuple[list[FloatArray], list[Any]]] = {
+        "all": (
+            list(test_observations),
+            split.test_labels.astype(int).tolist(),
+        )
+    }
+    for label in np.unique(split.test_labels):
+        indices = np.flatnonzero(split.test_labels == label)
+        evaluation[f"class_{int(label)}"] = (
+            [test_observations[int(index)] for index in indices],
+            [int(label)] * len(indices),
+        )
+    return segments, evaluation, int(observations.shape[1])
 
 
 def configuration_hash(config: ProjectionMemoryConfig, *, condition: str,
@@ -104,6 +177,7 @@ def run_condition(*, condition: str, feature_kind: str, readout_kind: str,
     feature_bytes = int(feature_map.state_nbytes)  # type: ignore[attr-defined]
     solver_bytes = int(learner.state_nbytes)  # type: ignore[attr-defined]
     transform_values = np.asarray(adapter.transform_durations_ns, dtype=np.float64) / 1_000.0
+    solver_values = np.asarray(adapter.learner_update_durations_ns, dtype=np.float64) / 1_000.0
     parameters = {"feature": feature_kind, "readout": readout_kind,
                   "fan_in": fan_in, "rank": rank,
                   "regularization": regularization}
@@ -126,7 +200,11 @@ def run_condition(*, condition: str, feature_kind: str, readout_kind: str,
                 "median_microseconds": float(np.median(transform_values)) if len(transform_values) else 0.0,
                 "samples": int(len(transform_values)),
             },
-            "solver_update_latency": training["update_latency"],
+            "solver_update_latency": {
+                "mean_microseconds": float(np.mean(solver_values)) if len(solver_values) else 0.0,
+                "median_microseconds": float(np.median(solver_values)) if len(solver_values) else 0.0,
+                "p95_microseconds": float(np.percentile(solver_values, 95)) if len(solver_values) else 0.0,
+            },
             "end_to_end_event_latency": training["prediction_latency"],
             "throughput_events_per_second": training["samples_per_second"],
         },
@@ -143,7 +221,8 @@ def run_projection_memory_study(*, config: ProjectionMemoryConfig,
                                 segments_by_seed: Mapping[int, list[list[tuple[FloatArray, FloatArray]]]],
                                 evaluation_by_seed: Mapping[int, Mapping[str, tuple[list[FloatArray], list[Any]]]],
                                 output: str | Path | None = None,
-                                resume: bool = True) -> dict[str, Any]:
+                                resume: bool = True,
+                                progress: Callable[[str], None] | None = None) -> dict[str, Any]:
     """Run paired conditions and optionally persist one atomic artifact per seed."""
     root = Path(output) if output is not None else None
     runs: list[dict[str, Any]] = []
@@ -155,6 +234,8 @@ def run_projection_memory_study(*, config: ProjectionMemoryConfig,
             if resume and path and artifact_matches(path, experiment="structured_projection_nystrom_memory",
                                                     seed=seed, configuration_hash=expected_hash):
                 runs.append(json.loads(path.read_text(encoding="utf-8")))
+                if progress:
+                    progress(f"resumed condition={name} seed={seed}")
                 continue
             run = run_condition(condition=name, config=config, seed=seed,
                                 segments=segments_by_seed[seed],
@@ -162,6 +243,8 @@ def run_projection_memory_study(*, config: ProjectionMemoryConfig,
             if path:
                 write_json_result(run, path)
             runs.append(run)
+            if progress:
+                progress(f"completed condition={name} seed={seed}")
     result = {"schema_version": 1, "experiment": "structured_projection_nystrom_memory",
               "configuration": asdict(config), "runs": runs,
               "conditions": dict(conditions),

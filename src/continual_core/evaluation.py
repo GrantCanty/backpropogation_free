@@ -71,6 +71,7 @@ class FeatureMapAdapter:
 
     feature_map: object
     transform_durations_ns: list[int] = field(default_factory=list)
+    learner_update_durations_ns: list[int] = field(default_factory=list)
 
     def _transform(self, observation: FloatArray) -> FloatArray:
         started = perf_counter()
@@ -88,7 +89,11 @@ class FeatureMapAdapter:
     ) -> None:
         if learn:
             features = self._transform(observation)
+            started = perf_counter()
             learner.update(features, target, prediction)  # type: ignore[attr-defined]
+            self.learner_update_durations_ns.append(
+                int((perf_counter() - started) * 1_000_000_000)
+            )
 
 
 @dataclass(frozen=True)
