@@ -9,7 +9,10 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 import hashlib
 import json
+import os
+import platform
 from pathlib import Path
+import sys
 from time import perf_counter
 from typing import Any, Callable, Mapping, Sequence
 
@@ -23,10 +26,17 @@ from continual_core.datasets.classification import (
 )
 from continual_core.datasets.digits import build_digits_segments
 from continual_core.evaluation import FeatureMapAdapter, train_classification_profiled
+from continual_core.metrics import (
+    classification_plasticity_summary,
+    sample_efficiency_steps,
+)
 from continual_core.protocols import FloatArray
 from continual_core.results import artifact_matches, write_json_result
 from methods.nystrom_memory import NystromCovarianceReadout
 from methods.structured_projection import SparseSignedFeatureMap
+
+
+MEASUREMENT_SCHEMA_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -68,6 +78,7 @@ def materialize_projection_problem(
     augmentation_copies: int = 1,
     augmentation_max_shift: int = 1,
     augmentation_noise_std: float = 0.03,
+    recurring_visits: int = 2,
 ) -> tuple[
     list[list[tuple[FloatArray, FloatArray]]],
     dict[str, tuple[list[FloatArray], list[Any]]],
@@ -93,6 +104,7 @@ def materialize_projection_problem(
     stream = build_digits_segments(
         split.train_labels,
         protocol=protocol,  # type: ignore[arg-type]
+        passes=(recurring_visits if protocol == "class_recurring" else 1),
         seed=seed + 20_000,
     )
     selected = [segment.indices[:events_per_segment] for segment in stream]
@@ -124,10 +136,62 @@ def materialize_projection_problem(
 
 
 def configuration_hash(config: ProjectionMemoryConfig, *, condition: str,
-                       parameters: Mapping[str, Any] | None = None) -> str:
+                       parameters: Mapping[str, Any] | None = None,
+                       problem_hash: str | None = None,
+                       protocol: str | None = None) -> str:
     payload = json.dumps({"config": asdict(config), "condition": condition,
-                          "parameters": dict(parameters or {})}, sort_keys=True)
+                          "parameters": dict(parameters or {}),
+                          "measurement_schema_version": MEASUREMENT_SCHEMA_VERSION,
+                          "problem_hash": problem_hash,
+                          "protocol": protocol},
+                         sort_keys=True)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def projection_problem_fingerprint(
+    segments: Sequence[Sequence[tuple[FloatArray, FloatArray]]],
+    evaluation_sets: Mapping[str, tuple[list[FloatArray], list[Any]]],
+) -> str:
+    """Hash exact ordered raw events and locked evaluation observations."""
+
+    digest = hashlib.sha256()
+    for segment in segments:
+        digest.update(len(segment).to_bytes(8, "little"))
+        for observation, target in segment:
+            digest.update(np.asarray(observation, dtype="<f8").tobytes())
+            digest.update(np.asarray(target, dtype="<f8").tobytes())
+    for name in sorted(evaluation_sets):
+        observations, labels = evaluation_sets[name]
+        digest.update(name.encode("utf-8"))
+        for observation, label in zip(observations, labels):
+            digest.update(np.asarray(observation, dtype="<f8").tobytes())
+            digest.update(str(label).encode("utf-8"))
+            digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def runtime_environment(timing_session_id: str | None = None) -> dict[str, Any]:
+    """Record implementation and host details needed to interpret timing."""
+
+    thread_variables = (
+        "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
+        "VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS",
+    )
+    return {
+        "timing_session_id": timing_session_id or platform.node(),
+        "python_version": sys.version.split()[0],
+        "numpy_version": np.__version__,
+        "platform": platform.platform(),
+        "machine": platform.machine(),
+        "processor": platform.processor() or None,
+        "cpu_count": os.cpu_count(),
+        "thread_environment": {
+            name: os.environ.get(name) for name in thread_variables
+        },
+        "dtype": "float64",
+        "backend": "numpy",
+        "batching": "event-wise",
+    }
 
 
 def feature_map_factory(kind: str, config: ProjectionMemoryConfig, *, seed: int,
@@ -161,7 +225,10 @@ def run_condition(*, condition: str, feature_kind: str, readout_kind: str,
                   segments: list[list[tuple[FloatArray, FloatArray]]],
                   evaluation_sets: Mapping[str, tuple[list[FloatArray], list[Any]]],
                   fan_in: int | None = None, rank: int | None = None,
-                  regularization: float | None = None) -> dict[str, Any]:
+                  regularization: float | None = None,
+                  protocol: str | None = None,
+                  problem_hash: str | None = None,
+                  environment: Mapping[str, Any] | None = None) -> dict[str, Any]:
     started = perf_counter()
     feature_map = feature_map_factory(feature_kind, config, seed=seed, fan_in=fan_in)
     width = feature_map.output_size  # type: ignore[attr-defined]
@@ -172,7 +239,9 @@ def run_condition(*, condition: str, feature_kind: str, readout_kind: str,
     target = lambda label: np.eye(classes, dtype=np.float64)[int(label)]
     training = train_classification_profiled(
         learner, segments, adapter, dict(evaluation_sets), target,
-        sample_efficiency_steps=(),
+        sample_efficiency_steps=sample_efficiency_steps(
+            sum(len(segment) for segment in segments)
+        ),
     )
     feature_bytes = int(feature_map.state_nbytes)  # type: ignore[attr-defined]
     solver_bytes = int(learner.state_nbytes)  # type: ignore[attr-defined]
@@ -185,12 +254,17 @@ def run_condition(*, condition: str, feature_kind: str, readout_kind: str,
         "schema_version": 1,
         "experiment": "structured_projection_nystrom_memory",
         "condition": condition,
+        "protocol": protocol,
         "seed": seed,
         "configuration_hash": configuration_hash(config, condition=condition,
-                                                  parameters=parameters),
+                                                  parameters=parameters,
+                                                  problem_hash=problem_hash,
+                                                  protocol=protocol),
+        "matched_problem_sha256": problem_hash,
         "completed": True,
         "parameters": parameters,
         "resources": {
+            "measurement_schema_version": MEASUREMENT_SCHEMA_VERSION,
             "representation_bytes": feature_bytes,
             "solver_bytes": solver_bytes,
             "total_persistent_bytes": feature_bytes + solver_bytes,
@@ -205,12 +279,20 @@ def run_condition(*, condition: str, feature_kind: str, readout_kind: str,
                 "median_microseconds": float(np.median(solver_values)) if len(solver_values) else 0.0,
                 "p95_microseconds": float(np.percentile(solver_values, 95)) if len(solver_values) else 0.0,
             },
-            "end_to_end_event_latency": training["prediction_latency"],
-            "throughput_events_per_second": training["samples_per_second"],
+            "prediction_latency": training["prediction_latency"],
+            "end_to_end_event_latency": training["event_latency"],
+            "throughput_events_per_second": training[
+                "stream_samples_per_second"
+            ],
+            "wall_throughput_including_checkpoints": training[
+                "samples_per_second"
+            ],
         },
         "elapsed_seconds": perf_counter() - started,
         "feature_map_diagnostics": dict(getattr(feature_map, "diagnostics", {})),
         "diagnostics": dict(getattr(learner, "diagnostics", {})),
+        "continual_learning_metrics": classification_plasticity_summary(training),
+        "runtime_environment": dict(environment or {}),
         "training": training,
     }
 
@@ -222,15 +304,30 @@ def run_projection_memory_study(*, config: ProjectionMemoryConfig,
                                 evaluation_by_seed: Mapping[int, Mapping[str, tuple[list[FloatArray], list[Any]]]],
                                 output: str | Path | None = None,
                                 resume: bool = True,
-                                progress: Callable[[str], None] | None = None) -> dict[str, Any]:
+                                progress: Callable[[str], None] | None = None,
+                                protocol: str | None = None,
+                                timing_session_id: str | None = None,
+                                rotate_condition_order: bool = True) -> dict[str, Any]:
     """Run paired conditions and optionally persist one atomic artifact per seed."""
     root = Path(output) if output is not None else None
     runs: list[dict[str, Any]] = []
-    for seed in seeds:
-        for name, parameters in conditions.items():
+    environment = runtime_environment(timing_session_id)
+    condition_items = list(conditions.items())
+    for seed_index, seed in enumerate(seeds):
+        problem_hash = projection_problem_fingerprint(
+            segments_by_seed[seed], evaluation_by_seed[seed]
+        )
+        if rotate_condition_order and condition_items:
+            shift = seed_index % len(condition_items)
+            ordered_conditions = condition_items[shift:] + condition_items[:shift]
+        else:
+            ordered_conditions = condition_items
+        for name, parameters in ordered_conditions:
             path = root / "raw" / f"{name}__seed_{seed}.json" if root else None
             expected_hash = configuration_hash(config, condition=name,
-                                               parameters=parameters)
+                                               parameters=parameters,
+                                               problem_hash=problem_hash,
+                                               protocol=protocol)
             if resume and path and artifact_matches(path, experiment="structured_projection_nystrom_memory",
                                                     seed=seed, configuration_hash=expected_hash):
                 runs.append(json.loads(path.read_text(encoding="utf-8")))
@@ -239,7 +336,9 @@ def run_projection_memory_study(*, config: ProjectionMemoryConfig,
                 continue
             run = run_condition(condition=name, config=config, seed=seed,
                                 segments=segments_by_seed[seed],
-                                evaluation_sets=evaluation_by_seed[seed], **parameters)
+                                evaluation_sets=evaluation_by_seed[seed],
+                                protocol=protocol, problem_hash=problem_hash,
+                                environment=environment, **parameters)
             if path:
                 write_json_result(run, path)
             runs.append(run)
@@ -248,6 +347,9 @@ def run_projection_memory_study(*, config: ProjectionMemoryConfig,
     result = {"schema_version": 1, "experiment": "structured_projection_nystrom_memory",
               "configuration": asdict(config), "runs": runs,
               "conditions": dict(conditions),
+              "protocol": protocol,
+              "runtime_environment": environment,
+              "condition_order_rotated_by_seed": rotate_condition_order,
               "resume_artifacts": str(root / "raw") if root else None}
     if root:
         write_json_result(result, root / "comparison.json")

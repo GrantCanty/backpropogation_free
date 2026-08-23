@@ -256,6 +256,7 @@ def train_classification_profiled(
     requested_steps.add(total_events)
     prediction_times: list[int] = []
     update_times: list[int] = []
+    event_times: list[int] = []
     correctness: list[float] = []
     squared_errors: list[float] = []
     sample_efficiency: list[dict[str, float | int]] = []
@@ -273,6 +274,7 @@ def train_classification_profiled(
     for segment_index, segment in enumerate(segments):
         segment_start = len(correctness)
         for observation, target in segment:
+            event_started = perf_counter()
             prediction_started = perf_counter()
             prediction = adapter.predict(learner, observation)
             prediction_times.append(
@@ -289,6 +291,9 @@ def train_classification_profiled(
             update_times.append(
                 int((perf_counter() - update_started) * 1_000_000_000)
             )
+            event_times.append(
+                int((perf_counter() - event_started) * 1_000_000_000)
+            )
             samples += 1
             if samples in requested_steps:
                 sample_efficiency.append(
@@ -304,17 +309,32 @@ def train_classification_profiled(
                 )
         segment_values = correctness[segment_start:]
         width = max(1, min(25, len(segment_values) // 5))
+        target_classes = {
+            int(np.argmax(target)) for _, target in segment
+        }
+        tail_accuracy = float(np.mean(segment_values[-width:]))
+        recovery_target = 0.9 * tail_accuracy
+        recovery_events = len(segment_values)
+        for stop in range(width, len(segment_values) + 1):
+            if float(np.mean(segment_values[stop - width : stop])) >= recovery_target:
+                recovery_events = stop
+                break
         segment_summaries.append(
             {
                 "segment": segment_index,
+                "focus_class": (
+                    next(iter(target_classes)) if len(target_classes) == 1 else None
+                ),
                 "samples": len(segment_values),
                 "online_accuracy": float(np.mean(segment_values)),
                 "head_accuracy": float(np.mean(segment_values[:width])),
-                "tail_accuracy": float(np.mean(segment_values[-width:])),
+                "tail_accuracy": tail_accuracy,
                 "adaptation_delta": float(
-                    np.mean(segment_values[-width:])
+                    tail_accuracy
                     - np.mean(segment_values[:width])
                 ),
+                "adaptation_window": width,
+                "events_to_90pct_tail_accuracy": recovery_events,
             }
         )
         checkpoint_scores = {
@@ -335,6 +355,7 @@ def train_classification_profiled(
             }
         )
     elapsed = perf_counter() - started
+    stream_seconds = sum(event_times) / 1_000_000_000.0
     _, traced_peak = tracemalloc.get_traced_memory()
     if not tracing_before:
         tracemalloc.stop()
@@ -354,8 +375,14 @@ def train_classification_profiled(
         "online_mse": float(np.mean(squared_errors)) if samples else 0.0,
         "seconds": elapsed,
         "samples_per_second": samples / elapsed if elapsed else float("inf"),
+        "stream_seconds": stream_seconds,
+        "stream_samples_per_second": (
+            samples / stream_seconds if stream_seconds else float("inf")
+        ),
+        "checkpoint_and_evaluator_seconds": max(0.0, elapsed - stream_seconds),
         "prediction_latency": _latency_summary(prediction_times),
         "update_latency": _latency_summary(update_times),
+        "event_latency": _latency_summary(event_times),
         "state_bytes_before": state_before,
         "state_bytes_after": state_nbytes(learner),
         "bounded_state": state_before == state_nbytes(learner),
