@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Run dense- and sparse-projection Nyström rank/regularization candidates.
 
-The sweep reuses existing dense-exact raw artifacts for comparisons and does
-not rerun that expensive reference.  Results are exploratory development
-evidence; select here, then confirm once on fresh paired seeds.
+The sweep reuses existing dense- and sparse-exact raw artifacts for comparisons
+and does not rerun those expensive references. Results are exploratory
+development evidence; select here, then confirm once on fresh paired seeds.
 """
 
 from __future__ import annotations
