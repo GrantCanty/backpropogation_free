@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run only sparse-projection Nyström rank/regularization candidates.
+"""Run dense- and sparse-projection Nyström rank/regularization candidates.
 
 The sweep reuses existing dense-exact raw artifacts for comparisons and does
 not rerun that expensive reference.  Results are exploratory development
@@ -45,9 +45,9 @@ def _absolute(path: Path) -> Path:
     return path.resolve() if path.is_absolute() else (REPOSITORY_ROOT / path).resolve()
 
 
-def _condition_name(rank: int, regularization: float) -> str:
+def _condition_name(feature: str, rank: int, regularization: float) -> str:
     ridge = format(regularization, "g").replace(".", "p")
-    return f"sparse_nystrom__rank_{rank}__ridge_{ridge}"
+    return f"{feature}_nystrom__rank_{rank}__ridge_{ridge}"
 
 
 def _final_accuracy(run: Mapping[str, Any]) -> float:
@@ -64,67 +64,126 @@ def _bootstrap_interval(values: np.ndarray) -> tuple[float, float]:
     return float(lower), float(upper)
 
 
-def _reference_runs(reference: Path, width: int, protocol: str,
-                    seeds: tuple[int, ...]) -> dict[int, dict[str, Any]]:
+def _reference_runs(
+    reference: Path, width: int, protocol: str, seeds: tuple[int, ...]
+) -> dict[str, dict[int, dict[str, Any]]]:
     raw = reference / f"width_{width}" / protocol / "raw"
-    result: dict[int, dict[str, Any]] = {}
-    for seed in seeds:
-        path = raw / f"dense_exact__seed_{seed}.json"
-        if not path.is_file():
-            raise FileNotFoundError(
-                f"missing paired dense-exact reference {path}; use seeds already "
-                "present in --reference-results or run a paired reference first"
-            )
-        result[seed] = json.loads(path.read_text(encoding="utf-8"))
+    result: dict[str, dict[int, dict[str, Any]]] = {}
+    for method in ("dense_exact", "sparse_exact"):
+        result[method] = {}
+        for seed in seeds:
+            path = raw / f"{method}__seed_{seed}.json"
+            if not path.is_file():
+                raise FileNotFoundError(
+                    f"missing paired {method} reference {path}; use seeds already "
+                    "present in --reference-results or run a paired reference first"
+                )
+            result[method][seed] = json.loads(path.read_text(encoding="utf-8"))
     return result
 
 
-def _comparison_summary(runs: list[dict[str, Any]], references: Mapping[int, dict[str, Any]]) -> list[dict[str, Any]]:
+def _comparison_summary(
+    runs: list[dict[str, Any]],
+    references: Mapping[str, Mapping[int, dict[str, Any]]],
+) -> list[dict[str, Any]]:
     grouped: dict[str, list[dict[str, Any]]] = {}
     for run in runs:
         grouped.setdefault(str(run["condition"]), []).append(run)
     summary: list[dict[str, Any]] = []
     for condition, candidates in sorted(grouped.items()):
         candidates.sort(key=lambda item: int(item["seed"]))
-        baseline = [references[int(run["seed"])] for run in candidates]
-        differences = np.asarray(
-            [_final_accuracy(run) - _final_accuracy(ref) for run, ref in zip(candidates, baseline)],
+        dense_exact = [
+            references["dense_exact"][int(run["seed"])] for run in candidates
+        ]
+        sparse_exact = [
+            references["sparse_exact"][int(run["seed"])] for run in candidates
+        ]
+        parameters = dict(candidates[0]["parameters"])
+        matched_name = f"{parameters['feature']}_exact"
+        matched_exact = dense_exact if matched_name == "dense_exact" else sparse_exact
+        differences_dense = np.asarray(
+            [
+                _final_accuracy(run) - _final_accuracy(ref)
+                for run, ref in zip(candidates, dense_exact)
+            ],
             dtype=np.float64,
         )
-        lower, upper = _bootstrap_interval(differences)
+        differences_sparse = np.asarray(
+            [
+                _final_accuracy(run) - _final_accuracy(ref)
+                for run, ref in zip(candidates, sparse_exact)
+            ],
+            dtype=np.float64,
+        )
+        differences_matched = np.asarray(
+            [
+                _final_accuracy(run) - _final_accuracy(ref)
+                for run, ref in zip(candidates, matched_exact)
+            ],
+            dtype=np.float64,
+        )
+        dense_lower, dense_upper = _bootstrap_interval(differences_dense)
+        sparse_lower, sparse_upper = _bootstrap_interval(differences_sparse)
+        matched_lower, matched_upper = _bootstrap_interval(differences_matched)
         candidate_solver = float(np.mean([run["resources"]["solver_bytes"] for run in candidates]))
-        baseline_solver = float(np.mean([run["resources"]["solver_bytes"] for run in baseline]))
+        baseline_solver = float(np.mean([run["resources"]["solver_bytes"] for run in matched_exact]))
         candidate_total = float(np.mean([run["resources"]["total_persistent_bytes"] for run in candidates]))
-        baseline_total = float(np.mean([run["resources"]["total_persistent_bytes"] for run in baseline]))
+        dense_total = float(np.mean([run["resources"]["total_persistent_bytes"] for run in dense_exact]))
+        sparse_total = float(np.mean([run["resources"]["total_persistent_bytes"] for run in sparse_exact]))
+        matched_total = dense_total if matched_name == "dense_exact" else sparse_total
         candidate_throughput = float(np.median([run["resources"]["throughput_events_per_second"] for run in candidates]))
-        baseline_throughput = float(np.median([run["resources"]["throughput_events_per_second"] for run in baseline]))
+        dense_throughput = float(np.median([run["resources"]["throughput_events_per_second"] for run in dense_exact]))
+        sparse_throughput = float(np.median([run["resources"]["throughput_events_per_second"] for run in sparse_exact]))
+        matched_throughput = (
+            dense_throughput if matched_name == "dense_exact" else sparse_throughput
+        )
         solver_reduction = 1.0 - candidate_solver / baseline_solver
-        total_reduction = 1.0 - candidate_total / baseline_total
-        quality_pass = lower > -0.01
-        latency_pass = candidate_throughput >= baseline_throughput
-        parameters = dict(candidates[0]["parameters"])
+        total_reduction_vs_dense = 1.0 - candidate_total / dense_total
+        total_reduction_vs_sparse = 1.0 - candidate_total / sparse_total
+        quality_vs_dense = dense_lower > -0.01
+        quality_vs_sparse = sparse_lower > -0.01
+        quality_vs_matched = matched_lower > -0.01
+        latency_vs_dense = candidate_throughput >= dense_throughput
+        latency_vs_sparse = candidate_throughput >= sparse_throughput
+        latency_vs_matched = candidate_throughput >= matched_throughput
+        total_reduction_vs_matched = 1.0 - candidate_total / matched_total
         summary.append(
             {
                 "condition": condition,
                 "parameters": parameters,
+                "matched_exact_reference": matched_name,
                 "seeds": [int(run["seed"]) for run in candidates],
                 "mean_final_locked_accuracy": float(np.mean([_final_accuracy(run) for run in candidates])),
-                "mean_paired_accuracy_delta": float(np.mean(differences)),
-                "paired_accuracy_delta_bootstrap_95_ci": [lower, upper],
+                "mean_paired_accuracy_delta_vs_dense_exact": float(np.mean(differences_dense)),
+                "paired_accuracy_delta_vs_dense_exact_bootstrap_95_ci": [dense_lower, dense_upper],
+                "mean_paired_accuracy_delta_vs_sparse_exact": float(np.mean(differences_sparse)),
+                "paired_accuracy_delta_vs_sparse_exact_bootstrap_95_ci": [sparse_lower, sparse_upper],
+                "mean_paired_accuracy_delta_vs_matched_exact": float(np.mean(differences_matched)),
+                "paired_accuracy_delta_vs_matched_exact_bootstrap_95_ci": [matched_lower, matched_upper],
                 "solver_memory_reduction": solver_reduction,
-                "total_memory_reduction": total_reduction,
-                "median_throughput_ratio": candidate_throughput / baseline_throughput,
-                "quality_gate_pass": quality_pass,
-                "latency_gate_pass": latency_pass,
+                "total_memory_reduction_vs_dense_exact": total_reduction_vs_dense,
+                "total_memory_reduction_vs_sparse_exact": total_reduction_vs_sparse,
+                "total_memory_reduction_vs_matched_exact": total_reduction_vs_matched,
+                "median_throughput_ratio_vs_dense_exact": candidate_throughput / dense_throughput,
+                "median_throughput_ratio_vs_sparse_exact": candidate_throughput / sparse_throughput,
+                "median_throughput_ratio_vs_matched_exact": candidate_throughput / matched_throughput,
+                "quality_gate_vs_dense_exact_pass": quality_vs_dense,
+                "quality_gate_vs_sparse_exact_pass": quality_vs_sparse,
+                "latency_gate_vs_dense_exact_pass": latency_vs_dense,
+                "latency_gate_vs_sparse_exact_pass": latency_vs_sparse,
+                "quality_gate_vs_matched_exact_pass": quality_vs_matched,
+                "latency_gate_vs_matched_exact_pass": latency_vs_matched,
                 "original_solver_gate_pass": solver_reduction >= 0.50,
-                "original_total_gate_pass": total_reduction >= 0.25,
-                "revised_total_50_percent_gate_pass": total_reduction >= 0.50,
+                "original_total_gate_pass": total_reduction_vs_matched >= 0.25,
+                "combined_total_50_percent_gate_pass": total_reduction_vs_dense >= 0.50,
                 "all_original_gates_pass": bool(
-                    quality_pass and latency_pass and solver_reduction >= 0.50
-                    and total_reduction >= 0.25
+                    quality_vs_matched and latency_vs_matched
+                    and solver_reduction >= 0.50
+                    and total_reduction_vs_matched >= 0.25
                 ),
-                "all_revised_total_tradeoff_gates_pass": bool(
-                    quality_pass and latency_pass and total_reduction >= 0.50
+                "all_combined_tradeoff_gates_pass": bool(
+                    quality_vs_dense and latency_vs_dense
+                    and total_reduction_vs_dense >= 0.50
                 ),
             }
         )
@@ -132,24 +191,39 @@ def _comparison_summary(runs: list[dict[str, Any]], references: Mapping[int, dic
 
 
 def _write_report(summary: Mapping[str, Any], destination: Path) -> None:
-    lines = ["# Sparse Nyström Rank Sweep", "",
+    lines = ["# Dense and Sparse Nyström Rank Sweep", "",
              "Exploratory development sweep; confirmation requires fresh paired seeds.", ""]
     for study in summary["studies"]:
         lines.extend([f"## Width {study['width']} — {study['protocol']}", ""])
         for item in study["candidates"]:
             rank = item["parameters"]["rank"]
             ridge = item["parameters"]["regularization"]
-            ci = item["paired_accuracy_delta_bootstrap_95_ci"]
+            feature = item["parameters"]["feature"]
+            matched = item["matched_exact_reference"].replace("_", "+")
+            sparse_ci = item[
+                "paired_accuracy_delta_vs_sparse_exact_bootstrap_95_ci"
+            ]
+            dense_ci = item[
+                "paired_accuracy_delta_vs_dense_exact_bootstrap_95_ci"
+            ]
             lines.append(
-                f"- rank {rank}, ridge {ridge:g}: accuracy delta "
-                f"{item['mean_paired_accuracy_delta']:+.4f} "
-                f"(95% CI {ci[0]:+.4f}, {ci[1]:+.4f}); solver memory "
+                f"- {feature}, rank {rank}, ridge {ridge:g}: vs {matched} accuracy "
+                f"{item['mean_paired_accuracy_delta_vs_matched_exact']:+.4f} "
+                f"(95% CI {item['paired_accuracy_delta_vs_matched_exact_bootstrap_95_ci'][0]:+.4f}, "
+                f"{item['paired_accuracy_delta_vs_matched_exact_bootstrap_95_ci'][1]:+.4f}), "
+                f"vs dense+exact {item['mean_paired_accuracy_delta_vs_dense_exact']:+.4f} "
+                f"(95% CI {dense_ci[0]:+.4f}, {dense_ci[1]:+.4f}); solver memory "
                 f"reduction {100 * item['solver_memory_reduction']:+.1f}%; "
-                f"total memory reduction {100 * item['total_memory_reduction']:+.1f}%; throughput "
-                f"{item['median_throughput_ratio']:.2f}×; original gates "
+                f"total reduction vs matched exact "
+                f"{100 * item['total_memory_reduction_vs_matched_exact']:+.1f}%, "
+                f"vs dense+exact {100 * item['total_memory_reduction_vs_dense_exact']:+.1f}%; "
+                f"throughput vs matched exact "
+                f"{item['median_throughput_ratio_vs_matched_exact']:.2f}×, "
+                f"vs dense+exact {item['median_throughput_ratio_vs_dense_exact']:.2f}×; "
+                f"original gates "
                 f"{'PASS' if item['all_original_gates_pass'] else 'FAIL'}; "
-                f"revised total tradeoff "
-                f"{'PASS' if item['all_revised_total_tradeoff_gates_pass'] else 'FAIL'}"
+                f"combined tradeoff "
+                f"{'PASS' if item['all_combined_tradeoff_gates_pass'] else 'FAIL'}"
             )
         lines.append("")
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -160,7 +234,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     output = _absolute(args.output)
     reference = _absolute(args.reference_results)
     print(f"writing sweep artifacts to {output}", flush=True)
-    print(f"reusing dense-exact references from {reference}", flush=True)
+    print(f"reusing dense-exact and sparse-exact references from {reference}", flush=True)
     widths = (16,) if args.smoke else args.widths
     ranks = (4, 8) if args.smoke else args.ranks
     regularizations = (1.0,) if args.smoke else args.regularizations
@@ -203,13 +277,18 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 confirmatory_seeds=tuple(),
             )
             conditions = {
-                _condition_name(rank, ridge): {
-                    "feature_kind": "sparse",
+                _condition_name(feature, rank, ridge): {
+                    "feature_kind": feature,
                     "readout_kind": "nystrom",
-                    "fan_in": min(args.sparse_fan_in, input_size),
+                    "fan_in": (
+                        min(args.sparse_fan_in, input_size)
+                        if feature == "sparse"
+                        else None
+                    ),
                     "rank": min(rank, width + 1),
                     "regularization": ridge,
                 }
+                for feature in ("dense", "sparse")
                 for rank in ranks
                 for ridge in regularizations
             }
@@ -237,7 +316,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             )
     summary = {
         "schema_version": 1,
-        "experiment": "sparse_nystrom_rank_sweep",
+        "experiment": "nystrom_rank_sweep",
         "phase": "exploratory_development_after_rank32_result",
         "dataset": args.dataset,
         "configuration": {
@@ -247,9 +326,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         },
         "reference_results": str(reference),
         "gate_note": (
-            "Original solver and total-memory gates are retained separately. "
-            "The revised total-memory tradeoff is exploratory and does not "
-            "retroactively change the original gate."
+            "Solver-only gates compare each Nyström candidate with exact RLS "
+            "under the same feature map. The combined-system tradeoff also "
+            "compares every candidate with dense exact RLS."
         ),
         "studies": studies,
     }

@@ -1,4 +1,4 @@
-from scripts.run_sparse_nystrom_rank_sweep import build_parser
+from scripts.run_nystrom_rank_sweep import build_parser
 
 
 def test_rank_sweep_defaults_to_sparse_large_width_development_grid() -> None:
