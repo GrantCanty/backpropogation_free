@@ -2,46 +2,34 @@
 
 Runs: 20
 
-## dense_nystrom__rank_128__ridge_1
-
-- mean online accuracy: 0.648800
-- mean persistent bytes: 8833200
-- seeds: 100, 101
-
-## dense_nystrom__rank_192__ridge_1
-
-- mean online accuracy: 0.687350
-- mean persistent bytes: 10046640
-- seeds: 100, 101
-
 ## dense_nystrom__rank_256__ridge_1
 
 - mean online accuracy: 0.708400
 - mean persistent bytes: 11325616
 - seeds: 100, 101
 
-## dense_nystrom__rank_64__ridge_1
+## dense_nystrom__rank_320__ridge_1
 
-- mean online accuracy: 0.586150
-- mean persistent bytes: 7685296
+- mean online accuracy: 0.721600
+- mean persistent bytes: 12670128
 - seeds: 100, 101
 
-## dense_nystrom__rank_96__ridge_1
+## dense_nystrom__rank_384__ridge_1
 
-- mean online accuracy: 0.617800
-- mean persistent bytes: 8251056
+- mean online accuracy: 0.736900
+- mean persistent bytes: 14080176
 - seeds: 100, 101
 
-## sparse_nystrom__rank_128__ridge_1
+## dense_nystrom__rank_448__ridge_1
 
-- mean online accuracy: 0.650700
-- mean persistent bytes: 2484400
+- mean online accuracy: 0.747250
+- mean persistent bytes: 15555760
 - seeds: 100, 101
 
-## sparse_nystrom__rank_192__ridge_1
+## dense_nystrom__rank_512__ridge_1
 
-- mean online accuracy: 0.689050
-- mean persistent bytes: 3697840
+- mean online accuracy: 0.753750
+- mean persistent bytes: 17096880
 - seeds: 100, 101
 
 ## sparse_nystrom__rank_256__ridge_1
@@ -50,14 +38,26 @@ Runs: 20
 - mean persistent bytes: 4976816
 - seeds: 100, 101
 
-## sparse_nystrom__rank_64__ridge_1
+## sparse_nystrom__rank_320__ridge_1
 
-- mean online accuracy: 0.591750
-- mean persistent bytes: 1336496
+- mean online accuracy: 0.723550
+- mean persistent bytes: 6321328
 - seeds: 100, 101
 
-## sparse_nystrom__rank_96__ridge_1
+## sparse_nystrom__rank_384__ridge_1
 
-- mean online accuracy: 0.622600
-- mean persistent bytes: 1902256
+- mean online accuracy: 0.735500
+- mean persistent bytes: 7731376
+- seeds: 100, 101
+
+## sparse_nystrom__rank_448__ridge_1
+
+- mean online accuracy: 0.746050
+- mean persistent bytes: 9206960
+- seeds: 100, 101
+
+## sparse_nystrom__rank_512__ridge_1
+
+- mean online accuracy: 0.752750
+- mean persistent bytes: 10748080
 - seeds: 100, 101

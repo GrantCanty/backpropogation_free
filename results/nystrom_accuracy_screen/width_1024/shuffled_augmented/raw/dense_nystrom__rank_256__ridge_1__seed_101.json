@@ -1,7 +1,23 @@
 {
   "completed": true,
   "condition": "dense_nystrom__rank_256__ridge_1",
-  "configuration_hash": "3ab640750879353ba13373b5893f7f75e80c41c5b930f1dbc766642c0d62d2d0",
+  "configuration_hash": "6c916effc1dedd1a51efed648e16ec338f2e9867e95028a725c77160ce92b8eb",
+  "continual_learning_metrics": {
+    "average_forgetting": 0.0,
+    "backward_transfer": 0.0,
+    "final_locked_accuracy": 0.779,
+    "final_worst_class_accuracy": 0.5,
+    "focused_segment_count": 0,
+    "mean_events_to_90pct_tail_accuracy": 27.6,
+    "mean_new_class_acquisition_accuracy": 0.0,
+    "mean_new_class_acquisition_gain": 0.0,
+    "mean_old_class_retention_delta": 0.0,
+    "mean_relearning_gain": 0.0,
+    "mean_segment_adaptation_delta": 0.012000000000000005,
+    "new_class_count": 0,
+    "recurring_visit_count": 0,
+    "sample_efficiency_auc": 0.67604
+  },
   "diagnostics": {
     "algorithm": "nystrom_covariance_memory",
     "forgetting_factor": 1.0,
@@ -11,13 +27,14 @@
     "samples_in_cumulative_statistics": 10000,
     "stored_raw_examples": 0
   },
-  "elapsed_seconds": 176.77601577199994,
+  "elapsed_seconds": 226.6157675909999,
   "experiment": "structured_projection_nystrom_memory",
   "feature_map_diagnostics": {
     "algorithm": "dense_frozen_os_elm",
     "representation": "dense_signed_gaussian_tanh",
     "stored_raw_examples": 0
   },
+  "matched_problem_sha256": "1756b14e8bba699ec3280d207f72c824513be075b16dcb44d89a8e9ba34111e7",
   "parameters": {
     "fan_in": null,
     "feature": "dense",
@@ -25,32 +42,60 @@
     "readout": "nystrom",
     "regularization": 1.0
   },
+  "protocol": "shuffled_augmented",
   "resources": {
     "end_to_end_event_latency": {
-      "mean_microseconds": 537.6401107,
-      "median_microseconds": 526.869,
-      "p95_microseconds": 601.11615
+      "mean_microseconds": 21436.4252359,
+      "median_microseconds": 20771.219,
+      "p95_microseconds": 25145.950249999994
     },
-    "peak_transient_training_bytes": 13507225,
+    "measurement_schema_version": 2,
+    "peak_transient_training_bytes": 13914321,
+    "prediction_latency": {
+      "mean_microseconds": 673.938339,
+      "median_microseconds": 628.8885,
+      "p95_microseconds": 897.2435499999999
+    },
     "representation_bytes": 6430720,
     "solver_bytes": 4894896,
     "solver_update_latency": {
-      "mean_microseconds": 15419.3456967,
-      "median_microseconds": 15183.574,
-      "p95_microseconds": 16798.96715
+      "mean_microseconds": 20045.123925299995,
+      "median_microseconds": 19424.432,
+      "p95_microseconds": 23440.256299999997
     },
-    "throughput_events_per_second": 56.59061047223814,
+    "throughput_events_per_second": 46.64956908604707,
     "total_persistent_bytes": 11325616,
     "transform_latency": {
-      "mean_microseconds": 385.06552207500005,
-      "median_microseconds": 362.921,
+      "mean_microseconds": 437.78819875,
+      "median_microseconds": 396.049,
       "samples": 40000
-    }
+    },
+    "wall_throughput_including_checkpoints": 44.145378588846214
+  },
+  "runtime_environment": {
+    "backend": "numpy",
+    "batching": "event-wise",
+    "cpu_count": 4,
+    "dtype": "float64",
+    "machine": "x86_64",
+    "numpy_version": "2.0.2",
+    "platform": "Linux-6.12.90+-x86_64-with-glibc2.35",
+    "processor": "x86_64",
+    "python_version": "3.12.13",
+    "thread_environment": {
+      "MKL_NUM_THREADS": null,
+      "NUMEXPR_NUM_THREADS": null,
+      "OMP_NUM_THREADS": null,
+      "OPENBLAS_NUM_THREADS": null,
+      "VECLIB_MAXIMUM_THREADS": null
+    },
+    "timing_session_id": "bb09cfc9ed89"
   },
   "schema_version": 1,
   "seed": 101,
   "training": {
     "bounded_state": true,
+    "checkpoint_and_evaluator_seconds": 12.160025372001343,
     "checkpoints": [
       {
         "evaluation_sets": {
@@ -1413,19 +1458,49 @@
         "segment": 9
       }
     ],
+    "event_latency": {
+      "mean_microseconds": 21436.4252359,
+      "median_microseconds": 20771.219,
+      "p95_microseconds": 25145.950249999994
+    },
     "maximum_absolute_state_value": 7281247.221854177,
     "nonfinite_state_values": 0,
     "online_accuracy": 0.7076,
     "online_mse": 0.06905367183958395,
     "peak_memory_note": "Python/NumPy traced allocation peak is reported; isolated peak process RSS is unavailable in this in-process comparison",
     "peak_process_rss_bytes": null,
-    "peak_traced_training_bytes": 13507225,
+    "peak_traced_training_bytes": 13914321,
     "prediction_latency": {
-      "mean_microseconds": 537.6401107,
-      "median_microseconds": 526.869,
-      "p95_microseconds": 601.11615
+      "mean_microseconds": 673.938339,
+      "median_microseconds": 628.8885,
+      "p95_microseconds": 897.2435499999999
     },
     "sample_efficiency": [
+      {
+        "cumulative_online_accuracy": 0.56,
+        "cumulative_online_mse": 0.07180128700073361,
+        "samples": 100
+      },
+      {
+        "cumulative_online_accuracy": 0.606,
+        "cumulative_online_mse": 0.07209375835565644,
+        "samples": 500
+      },
+      {
+        "cumulative_online_accuracy": 0.626,
+        "cumulative_online_mse": 0.07597894517890193,
+        "samples": 1000
+      },
+      {
+        "cumulative_online_accuracy": 0.6656,
+        "cumulative_online_mse": 0.07521216948869516,
+        "samples": 2500
+      },
+      {
+        "cumulative_online_accuracy": 0.6916,
+        "cumulative_online_mse": 0.07255736171086755,
+        "samples": 5000
+      },
       {
         "cumulative_online_accuracy": 0.7076,
         "cumulative_online_mse": 0.06905367183958395,
@@ -1433,11 +1508,14 @@
       }
     ],
     "samples": 10000,
-    "samples_per_second": 56.59061047223814,
-    "seconds": 176.70775976000004,
+    "samples_per_second": 44.145378588846214,
+    "seconds": 226.52427773100135,
     "segments": [
       {
         "adaptation_delta": 0.27999999999999997,
+        "adaptation_window": 25,
+        "events_to_90pct_tail_accuracy": 37,
+        "focus_class": null,
         "head_accuracy": 0.32,
         "online_accuracy": 0.626,
         "samples": 1000,
@@ -1446,6 +1524,9 @@
       },
       {
         "adaptation_delta": 0.16000000000000003,
+        "adaptation_window": 25,
+        "events_to_90pct_tail_accuracy": 31,
+        "focus_class": null,
         "head_accuracy": 0.48,
         "online_accuracy": 0.689,
         "samples": 1000,
@@ -1454,6 +1535,9 @@
       },
       {
         "adaptation_delta": 0.0,
+        "adaptation_window": 25,
+        "events_to_90pct_tail_accuracy": 25,
+        "focus_class": null,
         "head_accuracy": 0.64,
         "online_accuracy": 0.717,
         "samples": 1000,
@@ -1462,6 +1546,9 @@
       },
       {
         "adaptation_delta": 0.040000000000000036,
+        "adaptation_window": 25,
+        "events_to_90pct_tail_accuracy": 25,
+        "focus_class": null,
         "head_accuracy": 0.64,
         "online_accuracy": 0.694,
         "samples": 1000,
@@ -1470,6 +1557,9 @@
       },
       {
         "adaptation_delta": -0.12,
+        "adaptation_window": 25,
+        "events_to_90pct_tail_accuracy": 25,
+        "focus_class": null,
         "head_accuracy": 0.76,
         "online_accuracy": 0.732,
         "samples": 1000,
@@ -1478,6 +1568,9 @@
       },
       {
         "adaptation_delta": -0.12,
+        "adaptation_window": 25,
+        "events_to_90pct_tail_accuracy": 25,
+        "focus_class": null,
         "head_accuracy": 0.8,
         "online_accuracy": 0.714,
         "samples": 1000,
@@ -1486,6 +1579,9 @@
       },
       {
         "adaptation_delta": -0.24,
+        "adaptation_window": 25,
+        "events_to_90pct_tail_accuracy": 25,
+        "focus_class": null,
         "head_accuracy": 0.8,
         "online_accuracy": 0.711,
         "samples": 1000,
@@ -1494,6 +1590,9 @@
       },
       {
         "adaptation_delta": 0.0,
+        "adaptation_window": 25,
+        "events_to_90pct_tail_accuracy": 25,
+        "focus_class": null,
         "head_accuracy": 0.72,
         "online_accuracy": 0.743,
         "samples": 1000,
@@ -1502,6 +1601,9 @@
       },
       {
         "adaptation_delta": 0.12,
+        "adaptation_window": 25,
+        "events_to_90pct_tail_accuracy": 33,
+        "focus_class": null,
         "head_accuracy": 0.68,
         "online_accuracy": 0.736,
         "samples": 1000,
@@ -1510,6 +1612,9 @@
       },
       {
         "adaptation_delta": 0.0,
+        "adaptation_window": 25,
+        "events_to_90pct_tail_accuracy": 25,
+        "focus_class": null,
         "head_accuracy": 0.88,
         "online_accuracy": 0.714,
         "samples": 1000,
@@ -1519,10 +1624,12 @@
     ],
     "state_bytes_after": 4894896,
     "state_bytes_before": 4894896,
+    "stream_samples_per_second": 46.64956908604707,
+    "stream_seconds": 214.364252359,
     "update_latency": {
-      "mean_microseconds": 15861.814733399999,
-      "median_microseconds": 15624.7085,
-      "p95_microseconds": 17268.0984
+      "mean_microseconds": 20537.365621200002,
+      "median_microseconds": 19900.567499999997,
+      "p95_microseconds": 24011.96079999999
     }
   }
 }

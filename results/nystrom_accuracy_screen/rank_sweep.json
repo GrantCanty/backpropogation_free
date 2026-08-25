@@ -1,11 +1,10 @@
 {
   "configuration": {
     "ranks": [
+      32,
       64,
       96,
-      128,
-      192,
-      256
+      128
     ],
     "regularizations": [
       1.0
@@ -16,7 +15,7 @@
     ],
     "sparse_fan_in": 8,
     "widths": [
-      1024
+      256
     ]
   },
   "dataset": "fashion_mnist",
@@ -27,37 +26,37 @@
   "schema_version": 1,
   "studies": [
     {
-      "artifact_directory": "/kaggle/working/nystrom_accuracy_screen/width_1024/shuffled_augmented",
+      "artifact_directory": "/kaggle/working/nystrom_accuracy_screen/width_256/shuffled_augmented",
       "candidates": [
         {
           "all_combined_tradeoff_gates_pass": false,
           "all_original_gates_pass": false,
           "combined_total_50_percent_gate_pass": false,
           "condition": "dense_nystrom__rank_128__ridge_1",
-          "latency_gate_vs_dense_exact_pass": true,
-          "latency_gate_vs_matched_exact_pass": true,
-          "latency_gate_vs_sparse_exact_pass": true,
+          "latency_gate_vs_dense_exact_pass": false,
+          "latency_gate_vs_matched_exact_pass": false,
+          "latency_gate_vs_sparse_exact_pass": false,
           "matched_exact_reference": "dense_exact",
-          "mean_final_locked_accuracy": 0.705,
-          "mean_paired_accuracy_delta_vs_dense_exact": -0.10600000000000004,
-          "mean_paired_accuracy_delta_vs_matched_exact": -0.10600000000000004,
-          "mean_paired_accuracy_delta_vs_sparse_exact": -0.11150000000000004,
-          "median_throughput_ratio_vs_dense_exact": 2.0661542104610886,
-          "median_throughput_ratio_vs_matched_exact": 2.0661542104610886,
-          "median_throughput_ratio_vs_sparse_exact": 1.957872893688638,
-          "original_solver_gate_pass": true,
-          "original_total_gate_pass": true,
+          "mean_final_locked_accuracy": 0.776,
+          "mean_paired_accuracy_delta_vs_dense_exact": -0.018500000000000016,
+          "mean_paired_accuracy_delta_vs_matched_exact": -0.018500000000000016,
+          "mean_paired_accuracy_delta_vs_sparse_exact": -0.016000000000000014,
+          "median_throughput_ratio_vs_dense_exact": 0.31950369864778216,
+          "median_throughput_ratio_vs_matched_exact": 0.31950369864778216,
+          "median_throughput_ratio_vs_sparse_exact": 0.2784053751422251,
+          "original_solver_gate_pass": false,
+          "original_total_gate_pass": false,
           "paired_accuracy_delta_vs_dense_exact_bootstrap_95_ci": [
-            -0.11699999999999999,
-            -0.09500000000000008
+            -0.02300000000000002,
+            -0.014000000000000012
           ],
           "paired_accuracy_delta_vs_matched_exact_bootstrap_95_ci": [
-            -0.11699999999999999,
-            -0.09500000000000008
+            -0.02300000000000002,
+            -0.014000000000000012
           ],
           "paired_accuracy_delta_vs_sparse_exact_bootstrap_95_ci": [
-            -0.127,
-            -0.09600000000000009
+            -0.02100000000000002,
+            -0.01100000000000001
           ],
           "parameters": {
             "fan_in": null,
@@ -73,94 +72,45 @@
             100,
             101
           ],
-          "solver_memory_reduction": 0.716922351832214,
-          "total_memory_reduction_vs_dense_exact": 0.4078719804366887,
-          "total_memory_reduction_vs_matched_exact": 0.4078719804366887,
-          "total_memory_reduction_vs_sparse_exact": -0.030841693002152004
+          "solver_memory_reduction": -0.2762354449933693,
+          "total_memory_reduction_vs_dense_exact": -0.07031334043081983,
+          "total_memory_reduction_vs_matched_exact": -0.07031334043081983,
+          "total_memory_reduction_vs_sparse_exact": -3.053639416119923
         },
         {
           "all_combined_tradeoff_gates_pass": false,
           "all_original_gates_pass": false,
           "combined_total_50_percent_gate_pass": false,
-          "condition": "dense_nystrom__rank_192__ridge_1",
-          "latency_gate_vs_dense_exact_pass": true,
-          "latency_gate_vs_matched_exact_pass": true,
-          "latency_gate_vs_sparse_exact_pass": true,
-          "matched_exact_reference": "dense_exact",
-          "mean_final_locked_accuracy": 0.7384999999999999,
-          "mean_paired_accuracy_delta_vs_dense_exact": -0.07250000000000001,
-          "mean_paired_accuracy_delta_vs_matched_exact": -0.07250000000000001,
-          "mean_paired_accuracy_delta_vs_sparse_exact": -0.07800000000000001,
-          "median_throughput_ratio_vs_dense_exact": 1.3627259019538216,
-          "median_throughput_ratio_vs_matched_exact": 1.3627259019538216,
-          "median_throughput_ratio_vs_sparse_exact": 1.291309279556331,
-          "original_solver_gate_pass": true,
-          "original_total_gate_pass": true,
-          "paired_accuracy_delta_vs_dense_exact_bootstrap_95_ci": [
-            -0.07400000000000007,
-            -0.07099999999999995
-          ],
-          "paired_accuracy_delta_vs_matched_exact_bootstrap_95_ci": [
-            -0.07400000000000007,
-            -0.07099999999999995
-          ],
-          "paired_accuracy_delta_vs_sparse_exact_bootstrap_95_ci": [
-            -0.08099999999999996,
-            -0.07500000000000007
-          ],
-          "parameters": {
-            "fan_in": null,
-            "feature": "dense",
-            "rank": 192,
-            "readout": "nystrom",
-            "regularization": 1.0
-          },
-          "quality_gate_vs_dense_exact_pass": false,
-          "quality_gate_vs_matched_exact_pass": false,
-          "quality_gate_vs_sparse_exact_pass": false,
-          "seeds": [
-            100,
-            101
-          ],
-          "solver_memory_reduction": 0.5739460351125251,
-          "total_memory_reduction_vs_dense_exact": 0.32652979141584637,
-          "total_memory_reduction_vs_matched_exact": 0.32652979141584637,
-          "total_memory_reduction_vs_sparse_exact": -0.17245113736620254
-        },
-        {
-          "all_combined_tradeoff_gates_pass": false,
-          "all_original_gates_pass": false,
-          "combined_total_50_percent_gate_pass": false,
-          "condition": "dense_nystrom__rank_256__ridge_1",
+          "condition": "dense_nystrom__rank_32__ridge_1",
           "latency_gate_vs_dense_exact_pass": false,
           "latency_gate_vs_matched_exact_pass": false,
           "latency_gate_vs_sparse_exact_pass": false,
           "matched_exact_reference": "dense_exact",
-          "mean_final_locked_accuracy": 0.7735000000000001,
-          "mean_paired_accuracy_delta_vs_dense_exact": -0.03749999999999998,
-          "mean_paired_accuracy_delta_vs_matched_exact": -0.03749999999999998,
-          "mean_paired_accuracy_delta_vs_sparse_exact": -0.04299999999999998,
-          "median_throughput_ratio_vs_dense_exact": 0.9237657868485265,
-          "median_throughput_ratio_vs_matched_exact": 0.9237657868485265,
-          "median_throughput_ratio_vs_sparse_exact": 0.875353826462,
-          "original_solver_gate_pass": false,
+          "mean_final_locked_accuracy": 0.723,
+          "mean_paired_accuracy_delta_vs_dense_exact": -0.07150000000000006,
+          "mean_paired_accuracy_delta_vs_matched_exact": -0.07150000000000006,
+          "mean_paired_accuracy_delta_vs_sparse_exact": -0.06900000000000006,
+          "median_throughput_ratio_vs_dense_exact": 0.9771382167307571,
+          "median_throughput_ratio_vs_matched_exact": 0.9771382167307571,
+          "median_throughput_ratio_vs_sparse_exact": 0.8514472068588668,
+          "original_solver_gate_pass": true,
           "original_total_gate_pass": false,
           "paired_accuracy_delta_vs_dense_exact_bootstrap_95_ci": [
-            -0.039999999999999925,
-            -0.03500000000000003
+            -0.08900000000000008,
+            -0.05400000000000005
           ],
           "paired_accuracy_delta_vs_matched_exact_bootstrap_95_ci": [
-            -0.039999999999999925,
-            -0.03500000000000003
+            -0.08900000000000008,
+            -0.05400000000000005
           ],
           "paired_accuracy_delta_vs_sparse_exact_bootstrap_95_ci": [
-            -0.04999999999999993,
-            -0.03600000000000003
+            -0.08700000000000008,
+            -0.051000000000000045
           ],
           "parameters": {
             "fan_in": null,
             "feature": "dense",
-            "rank": 256,
+            "rank": 32,
             "readout": "nystrom",
             "regularization": 1.0
           },
@@ -171,40 +121,40 @@
             100,
             101
           ],
-          "solver_memory_reduction": 0.42324779073877694,
-          "total_memory_reduction_vs_dense_exact": 0.2407944377559037,
-          "total_memory_reduction_vs_matched_exact": 0.2407944377559037,
-          "total_memory_reduction_vs_sparse_exact": -0.32170868674232
+          "solver_memory_reduction": 0.666710386336146,
+          "total_memory_reduction_vs_dense_exact": 0.16970535538747455,
+          "total_memory_reduction_vs_matched_exact": 0.16970535538747455,
+          "total_memory_reduction_vs_sparse_exact": -2.1446072577586084
         },
         {
           "all_combined_tradeoff_gates_pass": false,
           "all_original_gates_pass": false,
           "combined_total_50_percent_gate_pass": false,
           "condition": "dense_nystrom__rank_64__ridge_1",
-          "latency_gate_vs_dense_exact_pass": true,
-          "latency_gate_vs_matched_exact_pass": true,
-          "latency_gate_vs_sparse_exact_pass": true,
+          "latency_gate_vs_dense_exact_pass": false,
+          "latency_gate_vs_matched_exact_pass": false,
+          "latency_gate_vs_sparse_exact_pass": false,
           "matched_exact_reference": "dense_exact",
-          "mean_final_locked_accuracy": 0.6455,
-          "mean_paired_accuracy_delta_vs_dense_exact": -0.16549999999999998,
-          "mean_paired_accuracy_delta_vs_matched_exact": -0.16549999999999998,
-          "mean_paired_accuracy_delta_vs_sparse_exact": -0.17099999999999999,
-          "median_throughput_ratio_vs_dense_exact": 3.2182623938035886,
-          "median_throughput_ratio_vs_matched_exact": 3.2182623938035886,
-          "median_throughput_ratio_vs_sparse_exact": 3.0496023354420476,
-          "original_solver_gate_pass": true,
-          "original_total_gate_pass": true,
+          "mean_final_locked_accuracy": 0.736,
+          "mean_paired_accuracy_delta_vs_dense_exact": -0.05850000000000005,
+          "mean_paired_accuracy_delta_vs_matched_exact": -0.05850000000000005,
+          "mean_paired_accuracy_delta_vs_sparse_exact": -0.05600000000000005,
+          "median_throughput_ratio_vs_dense_exact": 0.5113304608988803,
+          "median_throughput_ratio_vs_matched_exact": 0.5113304608988803,
+          "median_throughput_ratio_vs_sparse_exact": 0.44555712309650847,
+          "original_solver_gate_pass": false,
+          "original_total_gate_pass": false,
           "paired_accuracy_delta_vs_dense_exact_bootstrap_95_ci": [
-            -0.17500000000000004,
-            -0.15599999999999992
+            -0.07500000000000007,
+            -0.04200000000000004
           ],
           "paired_accuracy_delta_vs_matched_exact_bootstrap_95_ci": [
-            -0.17500000000000004,
-            -0.15599999999999992
+            -0.07500000000000007,
+            -0.04200000000000004
           ],
           "paired_accuracy_delta_vs_sparse_exact_bootstrap_95_ci": [
-            -0.17600000000000005,
-            -0.16599999999999993
+            -0.07300000000000006,
+            -0.039000000000000035
           ],
           "parameters": {
             "fan_in": null,
@@ -220,40 +170,40 @@
             100,
             101
           ],
-          "solver_memory_reduction": 0.8521767408978438,
-          "total_memory_reduction_vs_dense_exact": 0.4848210048184307,
-          "total_memory_reduction_vs_matched_exact": 0.4848210048184307,
-          "total_memory_reduction_vs_sparse_exact": 0.10311964634983173
+          "solver_memory_reduction": 0.38224107025750886,
+          "total_memory_reduction_vs_dense_exact": 0.09729615437404249,
+          "total_memory_reduction_vs_matched_exact": 0.09729615437404249,
+          "total_memory_reduction_vs_sparse_exact": -2.418845445988283
         },
         {
           "all_combined_tradeoff_gates_pass": false,
           "all_original_gates_pass": false,
           "combined_total_50_percent_gate_pass": false,
           "condition": "dense_nystrom__rank_96__ridge_1",
-          "latency_gate_vs_dense_exact_pass": true,
-          "latency_gate_vs_matched_exact_pass": true,
-          "latency_gate_vs_sparse_exact_pass": true,
+          "latency_gate_vs_dense_exact_pass": false,
+          "latency_gate_vs_matched_exact_pass": false,
+          "latency_gate_vs_sparse_exact_pass": false,
           "matched_exact_reference": "dense_exact",
-          "mean_final_locked_accuracy": 0.6865,
-          "mean_paired_accuracy_delta_vs_dense_exact": -0.1245,
-          "mean_paired_accuracy_delta_vs_matched_exact": -0.1245,
-          "mean_paired_accuracy_delta_vs_sparse_exact": -0.13,
-          "median_throughput_ratio_vs_dense_exact": 2.5764918941115886,
-          "median_throughput_ratio_vs_matched_exact": 2.5764918941115886,
-          "median_throughput_ratio_vs_sparse_exact": 2.441465218205491,
-          "original_solver_gate_pass": true,
-          "original_total_gate_pass": true,
+          "mean_final_locked_accuracy": 0.7715000000000001,
+          "mean_paired_accuracy_delta_vs_dense_exact": -0.02300000000000002,
+          "mean_paired_accuracy_delta_vs_matched_exact": -0.02300000000000002,
+          "mean_paired_accuracy_delta_vs_sparse_exact": -0.020500000000000018,
+          "median_throughput_ratio_vs_dense_exact": 0.3956330794457614,
+          "median_throughput_ratio_vs_matched_exact": 0.3956330794457614,
+          "median_throughput_ratio_vs_sparse_exact": 0.3447420995999025,
+          "original_solver_gate_pass": false,
+          "original_total_gate_pass": false,
           "paired_accuracy_delta_vs_dense_exact_bootstrap_95_ci": [
-            -0.13,
-            -0.119
+            -0.02400000000000002,
+            -0.02200000000000002
           ],
           "paired_accuracy_delta_vs_matched_exact_bootstrap_95_ci": [
-            -0.13,
-            -0.119
+            -0.02400000000000002,
+            -0.02200000000000002
           ],
           "paired_accuracy_delta_vs_sparse_exact_bootstrap_95_ci": [
-            -0.14,
-            -0.12
+            -0.02100000000000002,
+            -0.020000000000000018
           ],
           "parameters": {
             "fan_in": null,
@@ -269,40 +219,40 @@
             100,
             101
           ],
-          "solver_memory_reduction": 0.7855147873217863,
-          "total_memory_reduction_vs_dense_exact": 0.44689563820744727,
-          "total_memory_reduction_vs_matched_exact": 0.44689563820744727,
-          "total_memory_reduction_vs_sparse_exact": 0.0370949898003482
+          "solver_memory_reduction": 0.06792579314767044,
+          "total_memory_reduction_vs_dense_exact": 0.017289922434611027,
+          "total_memory_reduction_vs_matched_exact": 0.017289922434611027,
+          "total_memory_reduction_vs_sparse_exact": -2.7218561654420546
         },
         {
           "all_combined_tradeoff_gates_pass": false,
           "all_original_gates_pass": false,
           "combined_total_50_percent_gate_pass": true,
           "condition": "sparse_nystrom__rank_128__ridge_1",
-          "latency_gate_vs_dense_exact_pass": true,
-          "latency_gate_vs_matched_exact_pass": true,
-          "latency_gate_vs_sparse_exact_pass": true,
+          "latency_gate_vs_dense_exact_pass": false,
+          "latency_gate_vs_matched_exact_pass": false,
+          "latency_gate_vs_sparse_exact_pass": false,
           "matched_exact_reference": "sparse_exact",
-          "mean_final_locked_accuracy": 0.712,
-          "mean_paired_accuracy_delta_vs_dense_exact": -0.09900000000000003,
-          "mean_paired_accuracy_delta_vs_matched_exact": -0.10450000000000004,
-          "mean_paired_accuracy_delta_vs_sparse_exact": -0.10450000000000004,
-          "median_throughput_ratio_vs_dense_exact": 2.2068524514630323,
-          "median_throughput_ratio_vs_matched_exact": 2.091197536569918,
-          "median_throughput_ratio_vs_sparse_exact": 2.091197536569918,
-          "original_solver_gate_pass": true,
-          "original_total_gate_pass": true,
+          "mean_final_locked_accuracy": 0.771,
+          "mean_paired_accuracy_delta_vs_dense_exact": -0.02350000000000002,
+          "mean_paired_accuracy_delta_vs_matched_exact": -0.02100000000000002,
+          "mean_paired_accuracy_delta_vs_sparse_exact": -0.02100000000000002,
+          "median_throughput_ratio_vs_dense_exact": 0.3378929194808253,
+          "median_throughput_ratio_vs_matched_exact": 0.29442915811019765,
+          "median_throughput_ratio_vs_sparse_exact": 0.29442915811019765,
+          "original_solver_gate_pass": false,
+          "original_total_gate_pass": false,
           "paired_accuracy_delta_vs_dense_exact_bootstrap_95_ci": [
-            -0.09999999999999998,
-            -0.09800000000000009
+            -0.027000000000000024,
+            -0.020000000000000018
           ],
           "paired_accuracy_delta_vs_matched_exact_bootstrap_95_ci": [
-            -0.10999999999999999,
-            -0.09900000000000009
+            -0.025000000000000022,
+            -0.017000000000000015
           ],
           "paired_accuracy_delta_vs_sparse_exact_bootstrap_95_ci": [
-            -0.10999999999999999,
-            -0.09900000000000009
+            -0.025000000000000022,
+            -0.017000000000000015
           ],
           "parameters": {
             "fan_in": 8,
@@ -318,94 +268,45 @@
             100,
             101
           ],
-          "solver_memory_reduction": 0.716922351832214,
-          "total_memory_reduction_vs_dense_exact": 0.8334598048495346,
-          "total_memory_reduction_vs_matched_exact": 0.7100684800418255,
-          "total_memory_reduction_vs_sparse_exact": 0.7100684800418255
+          "solver_memory_reduction": -0.2762354449933693,
+          "total_memory_reduction_vs_dense_exact": 0.6656490305253748,
+          "total_memory_reduction_vs_matched_exact": -0.2663004537855267,
+          "total_memory_reduction_vs_sparse_exact": -0.2663004537855267
         },
         {
           "all_combined_tradeoff_gates_pass": false,
           "all_original_gates_pass": false,
           "combined_total_50_percent_gate_pass": true,
-          "condition": "sparse_nystrom__rank_192__ridge_1",
+          "condition": "sparse_nystrom__rank_32__ridge_1",
           "latency_gate_vs_dense_exact_pass": true,
-          "latency_gate_vs_matched_exact_pass": true,
-          "latency_gate_vs_sparse_exact_pass": true,
-          "matched_exact_reference": "sparse_exact",
-          "mean_final_locked_accuracy": 0.7475,
-          "mean_paired_accuracy_delta_vs_dense_exact": -0.0635,
-          "mean_paired_accuracy_delta_vs_matched_exact": -0.069,
-          "mean_paired_accuracy_delta_vs_sparse_exact": -0.069,
-          "median_throughput_ratio_vs_dense_exact": 1.442718327802314,
-          "median_throughput_ratio_vs_matched_exact": 1.3671095278999483,
-          "median_throughput_ratio_vs_sparse_exact": 1.3671095278999483,
-          "original_solver_gate_pass": true,
-          "original_total_gate_pass": true,
-          "paired_accuracy_delta_vs_dense_exact_bootstrap_95_ci": [
-            -0.06699999999999995,
-            -0.06000000000000005
-          ],
-          "paired_accuracy_delta_vs_matched_exact_bootstrap_95_ci": [
-            -0.07699999999999996,
-            -0.061000000000000054
-          ],
-          "paired_accuracy_delta_vs_sparse_exact_bootstrap_95_ci": [
-            -0.07699999999999996,
-            -0.061000000000000054
-          ],
-          "parameters": {
-            "fan_in": 8,
-            "feature": "sparse",
-            "rank": 192,
-            "readout": "nystrom",
-            "regularization": 1.0
-          },
-          "quality_gate_vs_dense_exact_pass": false,
-          "quality_gate_vs_matched_exact_pass": false,
-          "quality_gate_vs_sparse_exact_pass": false,
-          "seeds": [
-            100,
-            101
-          ],
-          "solver_memory_reduction": 0.5739460351125251,
-          "total_memory_reduction_vs_dense_exact": 0.7521176158286923,
-          "total_memory_reduction_vs_matched_exact": 0.568459035677775,
-          "total_memory_reduction_vs_sparse_exact": 0.568459035677775
-        },
-        {
-          "all_combined_tradeoff_gates_pass": false,
-          "all_original_gates_pass": false,
-          "combined_total_50_percent_gate_pass": true,
-          "condition": "sparse_nystrom__rank_256__ridge_1",
-          "latency_gate_vs_dense_exact_pass": false,
           "latency_gate_vs_matched_exact_pass": false,
           "latency_gate_vs_sparse_exact_pass": false,
           "matched_exact_reference": "sparse_exact",
-          "mean_final_locked_accuracy": 0.7695000000000001,
-          "mean_paired_accuracy_delta_vs_dense_exact": -0.04149999999999998,
-          "mean_paired_accuracy_delta_vs_matched_exact": -0.046999999999999986,
-          "mean_paired_accuracy_delta_vs_sparse_exact": -0.046999999999999986,
-          "median_throughput_ratio_vs_dense_exact": 0.9566136067985845,
-          "median_throughput_ratio_vs_matched_exact": 0.9064801847809327,
-          "median_throughput_ratio_vs_sparse_exact": 0.9064801847809327,
-          "original_solver_gate_pass": false,
+          "mean_final_locked_accuracy": 0.707,
+          "mean_paired_accuracy_delta_vs_dense_exact": -0.08750000000000008,
+          "mean_paired_accuracy_delta_vs_matched_exact": -0.08500000000000008,
+          "mean_paired_accuracy_delta_vs_sparse_exact": -0.08500000000000008,
+          "median_throughput_ratio_vs_dense_exact": 1.0771679032953885,
+          "median_throughput_ratio_vs_matched_exact": 0.9386098986563275,
+          "median_throughput_ratio_vs_sparse_exact": 0.9386098986563275,
+          "original_solver_gate_pass": true,
           "original_total_gate_pass": true,
           "paired_accuracy_delta_vs_dense_exact_bootstrap_95_ci": [
-            -0.04200000000000004,
-            -0.040999999999999925
+            -0.08800000000000008,
+            -0.08700000000000008
           ],
           "paired_accuracy_delta_vs_matched_exact_bootstrap_95_ci": [
-            -0.050999999999999934,
-            -0.04300000000000004
+            -0.08600000000000008,
+            -0.08400000000000007
           ],
           "paired_accuracy_delta_vs_sparse_exact_bootstrap_95_ci": [
-            -0.050999999999999934,
-            -0.04300000000000004
+            -0.08600000000000008,
+            -0.08400000000000007
           ],
           "parameters": {
             "fan_in": 8,
             "feature": "sparse",
-            "rank": 256,
+            "rank": 32,
             "readout": "nystrom",
             "regularization": 1.0
           },
@@ -416,40 +317,40 @@
             100,
             101
           ],
-          "solver_memory_reduction": 0.42324779073877694,
-          "total_memory_reduction_vs_dense_exact": 0.6663822621687496,
-          "total_memory_reduction_vs_matched_exact": 0.41920148630165766,
-          "total_memory_reduction_vs_sparse_exact": 0.41920148630165766
+          "solver_memory_reduction": 0.666710386336146,
+          "total_memory_reduction_vs_dense_exact": 0.9056677263436692,
+          "total_memory_reduction_vs_matched_exact": 0.6427317045757879,
+          "total_memory_reduction_vs_sparse_exact": 0.6427317045757879
         },
         {
           "all_combined_tradeoff_gates_pass": false,
           "all_original_gates_pass": false,
           "combined_total_50_percent_gate_pass": true,
           "condition": "sparse_nystrom__rank_64__ridge_1",
-          "latency_gate_vs_dense_exact_pass": true,
-          "latency_gate_vs_matched_exact_pass": true,
-          "latency_gate_vs_sparse_exact_pass": true,
+          "latency_gate_vs_dense_exact_pass": false,
+          "latency_gate_vs_matched_exact_pass": false,
+          "latency_gate_vs_sparse_exact_pass": false,
           "matched_exact_reference": "sparse_exact",
-          "mean_final_locked_accuracy": 0.638,
-          "mean_paired_accuracy_delta_vs_dense_exact": -0.173,
-          "mean_paired_accuracy_delta_vs_matched_exact": -0.1785,
-          "mean_paired_accuracy_delta_vs_sparse_exact": -0.1785,
-          "median_throughput_ratio_vs_dense_exact": 3.4852753278913964,
-          "median_throughput_ratio_vs_matched_exact": 3.3026218744812588,
-          "median_throughput_ratio_vs_sparse_exact": 3.3026218744812588,
-          "original_solver_gate_pass": true,
+          "mean_final_locked_accuracy": 0.7595000000000001,
+          "mean_paired_accuracy_delta_vs_dense_exact": -0.03500000000000003,
+          "mean_paired_accuracy_delta_vs_matched_exact": -0.03250000000000003,
+          "mean_paired_accuracy_delta_vs_sparse_exact": -0.03250000000000003,
+          "median_throughput_ratio_vs_dense_exact": 0.5723459190782088,
+          "median_throughput_ratio_vs_matched_exact": 0.49872405542243753,
+          "median_throughput_ratio_vs_sparse_exact": 0.49872405542243753,
+          "original_solver_gate_pass": false,
           "original_total_gate_pass": true,
           "paired_accuracy_delta_vs_dense_exact_bootstrap_95_ci": [
-            -0.18799999999999994,
-            -0.15800000000000003
+            -0.041000000000000036,
+            -0.029000000000000026
           ],
           "paired_accuracy_delta_vs_matched_exact_bootstrap_95_ci": [
-            -0.19799999999999995,
-            -0.15900000000000003
+            -0.039000000000000035,
+            -0.026000000000000023
           ],
           "paired_accuracy_delta_vs_sparse_exact_bootstrap_95_ci": [
-            -0.19799999999999995,
-            -0.15900000000000003
+            -0.039000000000000035,
+            -0.026000000000000023
           ],
           "parameters": {
             "fan_in": 8,
@@ -465,40 +366,40 @@
             100,
             101
           ],
-          "solver_memory_reduction": 0.8521767408978438,
-          "total_memory_reduction_vs_dense_exact": 0.9104088292312766,
-          "total_memory_reduction_vs_matched_exact": 0.8440298193938093,
-          "total_memory_reduction_vs_sparse_exact": 0.8440298193938093
+          "solver_memory_reduction": 0.38224107025750886,
+          "total_memory_reduction_vs_dense_exact": 0.8332585253302371,
+          "total_memory_reduction_vs_matched_exact": 0.36849351634611327,
+          "total_memory_reduction_vs_sparse_exact": 0.36849351634611327
         },
         {
           "all_combined_tradeoff_gates_pass": false,
           "all_original_gates_pass": false,
           "combined_total_50_percent_gate_pass": true,
           "condition": "sparse_nystrom__rank_96__ridge_1",
-          "latency_gate_vs_dense_exact_pass": true,
-          "latency_gate_vs_matched_exact_pass": true,
-          "latency_gate_vs_sparse_exact_pass": true,
+          "latency_gate_vs_dense_exact_pass": false,
+          "latency_gate_vs_matched_exact_pass": false,
+          "latency_gate_vs_sparse_exact_pass": false,
           "matched_exact_reference": "sparse_exact",
-          "mean_final_locked_accuracy": 0.6885,
-          "mean_paired_accuracy_delta_vs_dense_exact": -0.1225,
-          "mean_paired_accuracy_delta_vs_matched_exact": -0.128,
-          "mean_paired_accuracy_delta_vs_sparse_exact": -0.128,
-          "median_throughput_ratio_vs_dense_exact": 2.7781647817863857,
-          "median_throughput_ratio_vs_matched_exact": 2.6325689984418577,
-          "median_throughput_ratio_vs_sparse_exact": 2.6325689984418577,
-          "original_solver_gate_pass": true,
-          "original_total_gate_pass": true,
+          "mean_final_locked_accuracy": 0.767,
+          "mean_paired_accuracy_delta_vs_dense_exact": -0.027500000000000024,
+          "mean_paired_accuracy_delta_vs_matched_exact": -0.025000000000000022,
+          "mean_paired_accuracy_delta_vs_sparse_exact": -0.025000000000000022,
+          "median_throughput_ratio_vs_dense_exact": 0.41243198583040025,
+          "median_throughput_ratio_vs_matched_exact": 0.3593801330680228,
+          "median_throughput_ratio_vs_sparse_exact": 0.3593801330680228,
+          "original_solver_gate_pass": false,
+          "original_total_gate_pass": false,
           "paired_accuracy_delta_vs_dense_exact_bootstrap_95_ci": [
-            -0.131,
-            -0.11399999999999999
+            -0.030000000000000027,
+            -0.025000000000000022
           ],
           "paired_accuracy_delta_vs_matched_exact_bootstrap_95_ci": [
-            -0.132,
-            -0.124
+            -0.028000000000000025,
+            -0.02200000000000002
           ],
           "paired_accuracy_delta_vs_sparse_exact_bootstrap_95_ci": [
-            -0.132,
-            -0.124
+            -0.028000000000000025,
+            -0.02200000000000002
           ],
           "parameters": {
             "fan_in": 8,
@@ -514,47 +415,47 @@
             100,
             101
           ],
-          "solver_memory_reduction": 0.7855147873217863,
-          "total_memory_reduction_vs_dense_exact": 0.8724834626202932,
-          "total_memory_reduction_vs_matched_exact": 0.7780051628443257,
-          "total_memory_reduction_vs_sparse_exact": 0.7780051628443257
+          "solver_memory_reduction": 0.06792579314767044,
+          "total_memory_reduction_vs_dense_exact": 0.7532522933908057,
+          "total_memory_reduction_vs_matched_exact": 0.06548279689234182,
+          "total_memory_reduction_vs_sparse_exact": 0.06548279689234182
         }
       ],
       "protocol": "shuffled_augmented",
-      "width": 1024
+      "width": 256
     },
     {
-      "artifact_directory": "/kaggle/working/nystrom_accuracy_screen/width_1024/class_ordered",
+      "artifact_directory": "/kaggle/working/nystrom_accuracy_screen/width_256/class_ordered",
       "candidates": [
         {
           "all_combined_tradeoff_gates_pass": false,
           "all_original_gates_pass": false,
           "combined_total_50_percent_gate_pass": false,
           "condition": "dense_nystrom__rank_128__ridge_1",
-          "latency_gate_vs_dense_exact_pass": true,
-          "latency_gate_vs_matched_exact_pass": true,
-          "latency_gate_vs_sparse_exact_pass": true,
+          "latency_gate_vs_dense_exact_pass": false,
+          "latency_gate_vs_matched_exact_pass": false,
+          "latency_gate_vs_sparse_exact_pass": false,
           "matched_exact_reference": "dense_exact",
-          "mean_final_locked_accuracy": 0.7004999999999999,
-          "mean_paired_accuracy_delta_vs_dense_exact": -0.10200000000000009,
-          "mean_paired_accuracy_delta_vs_matched_exact": -0.10200000000000009,
-          "mean_paired_accuracy_delta_vs_sparse_exact": -0.10700000000000004,
-          "median_throughput_ratio_vs_dense_exact": 2.2395982281914706,
-          "median_throughput_ratio_vs_matched_exact": 2.2395982281914706,
-          "median_throughput_ratio_vs_sparse_exact": 2.1162515220110145,
-          "original_solver_gate_pass": true,
-          "original_total_gate_pass": true,
+          "mean_final_locked_accuracy": 0.761,
+          "mean_paired_accuracy_delta_vs_dense_exact": -0.024500000000000022,
+          "mean_paired_accuracy_delta_vs_matched_exact": -0.024500000000000022,
+          "mean_paired_accuracy_delta_vs_sparse_exact": -0.02100000000000002,
+          "median_throughput_ratio_vs_dense_exact": 0.3129564969360241,
+          "median_throughput_ratio_vs_matched_exact": 0.3129564969360241,
+          "median_throughput_ratio_vs_sparse_exact": 0.2782247793971592,
+          "original_solver_gate_pass": false,
+          "original_total_gate_pass": false,
           "paired_accuracy_delta_vs_dense_exact_bootstrap_95_ci": [
-            -0.1050000000000001,
-            -0.09900000000000009
+            -0.026000000000000023,
+            -0.02300000000000002
           ],
           "paired_accuracy_delta_vs_matched_exact_bootstrap_95_ci": [
-            -0.1050000000000001,
-            -0.09900000000000009
+            -0.026000000000000023,
+            -0.02300000000000002
           ],
           "paired_accuracy_delta_vs_sparse_exact_bootstrap_95_ci": [
-            -0.10899999999999999,
-            -0.1050000000000001
+            -0.030000000000000027,
+            -0.01200000000000001
           ],
           "parameters": {
             "fan_in": null,
@@ -570,94 +471,45 @@
             100,
             101
           ],
-          "solver_memory_reduction": 0.716922351832214,
-          "total_memory_reduction_vs_dense_exact": 0.4078719804366887,
-          "total_memory_reduction_vs_matched_exact": 0.4078719804366887,
-          "total_memory_reduction_vs_sparse_exact": -0.030841693002152004
+          "solver_memory_reduction": -0.2762354449933693,
+          "total_memory_reduction_vs_dense_exact": -0.07031334043081983,
+          "total_memory_reduction_vs_matched_exact": -0.07031334043081983,
+          "total_memory_reduction_vs_sparse_exact": -3.053639416119923
         },
         {
           "all_combined_tradeoff_gates_pass": false,
           "all_original_gates_pass": false,
           "combined_total_50_percent_gate_pass": false,
-          "condition": "dense_nystrom__rank_192__ridge_1",
-          "latency_gate_vs_dense_exact_pass": true,
-          "latency_gate_vs_matched_exact_pass": true,
-          "latency_gate_vs_sparse_exact_pass": true,
-          "matched_exact_reference": "dense_exact",
-          "mean_final_locked_accuracy": 0.7384999999999999,
-          "mean_paired_accuracy_delta_vs_dense_exact": -0.06400000000000006,
-          "mean_paired_accuracy_delta_vs_matched_exact": -0.06400000000000006,
-          "mean_paired_accuracy_delta_vs_sparse_exact": -0.069,
-          "median_throughput_ratio_vs_dense_exact": 1.490438346191371,
-          "median_throughput_ratio_vs_matched_exact": 1.490438346191371,
-          "median_throughput_ratio_vs_sparse_exact": 1.4083518994110447,
-          "original_solver_gate_pass": true,
-          "original_total_gate_pass": true,
-          "paired_accuracy_delta_vs_dense_exact_bootstrap_95_ci": [
-            -0.06500000000000006,
-            -0.06300000000000006
-          ],
-          "paired_accuracy_delta_vs_matched_exact_bootstrap_95_ci": [
-            -0.06500000000000006,
-            -0.06300000000000006
-          ],
-          "paired_accuracy_delta_vs_sparse_exact_bootstrap_95_ci": [
-            -0.07100000000000006,
-            -0.06699999999999995
-          ],
-          "parameters": {
-            "fan_in": null,
-            "feature": "dense",
-            "rank": 192,
-            "readout": "nystrom",
-            "regularization": 1.0
-          },
-          "quality_gate_vs_dense_exact_pass": false,
-          "quality_gate_vs_matched_exact_pass": false,
-          "quality_gate_vs_sparse_exact_pass": false,
-          "seeds": [
-            100,
-            101
-          ],
-          "solver_memory_reduction": 0.5739460351125251,
-          "total_memory_reduction_vs_dense_exact": 0.32652979141584637,
-          "total_memory_reduction_vs_matched_exact": 0.32652979141584637,
-          "total_memory_reduction_vs_sparse_exact": -0.17245113736620254
-        },
-        {
-          "all_combined_tradeoff_gates_pass": false,
-          "all_original_gates_pass": false,
-          "combined_total_50_percent_gate_pass": false,
-          "condition": "dense_nystrom__rank_256__ridge_1",
+          "condition": "dense_nystrom__rank_32__ridge_1",
           "latency_gate_vs_dense_exact_pass": true,
           "latency_gate_vs_matched_exact_pass": true,
           "latency_gate_vs_sparse_exact_pass": false,
           "matched_exact_reference": "dense_exact",
-          "mean_final_locked_accuracy": 0.773,
-          "mean_paired_accuracy_delta_vs_dense_exact": -0.029500000000000026,
-          "mean_paired_accuracy_delta_vs_matched_exact": -0.029500000000000026,
-          "mean_paired_accuracy_delta_vs_sparse_exact": -0.034499999999999975,
-          "median_throughput_ratio_vs_dense_exact": 1.0019498347188793,
-          "median_throughput_ratio_vs_matched_exact": 1.0019498347188793,
-          "median_throughput_ratio_vs_sparse_exact": 0.9467670745635338,
-          "original_solver_gate_pass": false,
+          "mean_final_locked_accuracy": 0.7184999999999999,
+          "mean_paired_accuracy_delta_vs_dense_exact": -0.06700000000000006,
+          "mean_paired_accuracy_delta_vs_matched_exact": -0.06700000000000006,
+          "mean_paired_accuracy_delta_vs_sparse_exact": -0.06350000000000006,
+          "median_throughput_ratio_vs_dense_exact": 1.0113077311873655,
+          "median_throughput_ratio_vs_matched_exact": 1.0113077311873655,
+          "median_throughput_ratio_vs_sparse_exact": 0.8990734276712119,
+          "original_solver_gate_pass": true,
           "original_total_gate_pass": false,
           "paired_accuracy_delta_vs_dense_exact_bootstrap_95_ci": [
-            -0.031000000000000028,
-            -0.028000000000000025
+            -0.08500000000000008,
+            -0.049000000000000044
           ],
           "paired_accuracy_delta_vs_matched_exact_bootstrap_95_ci": [
-            -0.031000000000000028,
-            -0.028000000000000025
+            -0.08500000000000008,
+            -0.049000000000000044
           ],
           "paired_accuracy_delta_vs_sparse_exact_bootstrap_95_ci": [
-            -0.03700000000000003,
-            -0.03199999999999992
+            -0.08900000000000008,
+            -0.038000000000000034
           ],
           "parameters": {
             "fan_in": null,
             "feature": "dense",
-            "rank": 256,
+            "rank": 32,
             "readout": "nystrom",
             "regularization": 1.0
           },
@@ -668,40 +520,40 @@
             100,
             101
           ],
-          "solver_memory_reduction": 0.42324779073877694,
-          "total_memory_reduction_vs_dense_exact": 0.2407944377559037,
-          "total_memory_reduction_vs_matched_exact": 0.2407944377559037,
-          "total_memory_reduction_vs_sparse_exact": -0.32170868674232
+          "solver_memory_reduction": 0.666710386336146,
+          "total_memory_reduction_vs_dense_exact": 0.16970535538747455,
+          "total_memory_reduction_vs_matched_exact": 0.16970535538747455,
+          "total_memory_reduction_vs_sparse_exact": -2.1446072577586084
         },
         {
           "all_combined_tradeoff_gates_pass": false,
           "all_original_gates_pass": false,
           "combined_total_50_percent_gate_pass": false,
           "condition": "dense_nystrom__rank_64__ridge_1",
-          "latency_gate_vs_dense_exact_pass": true,
-          "latency_gate_vs_matched_exact_pass": true,
-          "latency_gate_vs_sparse_exact_pass": true,
+          "latency_gate_vs_dense_exact_pass": false,
+          "latency_gate_vs_matched_exact_pass": false,
+          "latency_gate_vs_sparse_exact_pass": false,
           "matched_exact_reference": "dense_exact",
-          "mean_final_locked_accuracy": 0.651,
-          "mean_paired_accuracy_delta_vs_dense_exact": -0.15150000000000002,
-          "mean_paired_accuracy_delta_vs_matched_exact": -0.15150000000000002,
-          "mean_paired_accuracy_delta_vs_sparse_exact": -0.15649999999999997,
-          "median_throughput_ratio_vs_dense_exact": 3.4353737618167437,
-          "median_throughput_ratio_vs_matched_exact": 3.4353737618167437,
-          "median_throughput_ratio_vs_sparse_exact": 3.2461692729557923,
-          "original_solver_gate_pass": true,
-          "original_total_gate_pass": true,
+          "mean_final_locked_accuracy": 0.7404999999999999,
+          "mean_paired_accuracy_delta_vs_dense_exact": -0.04500000000000004,
+          "mean_paired_accuracy_delta_vs_matched_exact": -0.04500000000000004,
+          "mean_paired_accuracy_delta_vs_sparse_exact": -0.04150000000000004,
+          "median_throughput_ratio_vs_dense_exact": 0.5440107761109183,
+          "median_throughput_ratio_vs_matched_exact": 0.5440107761109183,
+          "median_throughput_ratio_vs_sparse_exact": 0.4836367982610653,
+          "original_solver_gate_pass": false,
+          "original_total_gate_pass": false,
           "paired_accuracy_delta_vs_dense_exact_bootstrap_95_ci": [
-            -0.15500000000000003,
-            -0.14800000000000002
+            -0.050000000000000044,
+            -0.040000000000000036
           ],
           "paired_accuracy_delta_vs_matched_exact_bootstrap_95_ci": [
-            -0.15500000000000003,
-            -0.14800000000000002
+            -0.050000000000000044,
+            -0.040000000000000036
           ],
           "paired_accuracy_delta_vs_sparse_exact_bootstrap_95_ci": [
-            -0.16100000000000003,
-            -0.1519999999999999
+            -0.05400000000000005,
+            -0.029000000000000026
           ],
           "parameters": {
             "fan_in": null,
@@ -717,40 +569,40 @@
             100,
             101
           ],
-          "solver_memory_reduction": 0.8521767408978438,
-          "total_memory_reduction_vs_dense_exact": 0.4848210048184307,
-          "total_memory_reduction_vs_matched_exact": 0.4848210048184307,
-          "total_memory_reduction_vs_sparse_exact": 0.10311964634983173
+          "solver_memory_reduction": 0.38224107025750886,
+          "total_memory_reduction_vs_dense_exact": 0.09729615437404249,
+          "total_memory_reduction_vs_matched_exact": 0.09729615437404249,
+          "total_memory_reduction_vs_sparse_exact": -2.418845445988283
         },
         {
           "all_combined_tradeoff_gates_pass": false,
           "all_original_gates_pass": false,
           "combined_total_50_percent_gate_pass": false,
           "condition": "dense_nystrom__rank_96__ridge_1",
-          "latency_gate_vs_dense_exact_pass": true,
-          "latency_gate_vs_matched_exact_pass": true,
-          "latency_gate_vs_sparse_exact_pass": true,
+          "latency_gate_vs_dense_exact_pass": false,
+          "latency_gate_vs_matched_exact_pass": false,
+          "latency_gate_vs_sparse_exact_pass": false,
           "matched_exact_reference": "dense_exact",
-          "mean_final_locked_accuracy": 0.683,
-          "mean_paired_accuracy_delta_vs_dense_exact": -0.1195,
-          "mean_paired_accuracy_delta_vs_matched_exact": -0.1195,
-          "mean_paired_accuracy_delta_vs_sparse_exact": -0.12449999999999994,
-          "median_throughput_ratio_vs_dense_exact": 2.7798134901105174,
-          "median_throughput_ratio_vs_matched_exact": 2.7798134901105174,
-          "median_throughput_ratio_vs_sparse_exact": 2.6267142272672817,
-          "original_solver_gate_pass": true,
-          "original_total_gate_pass": true,
+          "mean_final_locked_accuracy": 0.7655000000000001,
+          "mean_paired_accuracy_delta_vs_dense_exact": -0.020000000000000018,
+          "mean_paired_accuracy_delta_vs_matched_exact": -0.020000000000000018,
+          "mean_paired_accuracy_delta_vs_sparse_exact": -0.016500000000000015,
+          "median_throughput_ratio_vs_dense_exact": 0.40908959653289234,
+          "median_throughput_ratio_vs_matched_exact": 0.40908959653289234,
+          "median_throughput_ratio_vs_sparse_exact": 0.36368908734399646,
+          "original_solver_gate_pass": false,
+          "original_total_gate_pass": false,
           "paired_accuracy_delta_vs_dense_exact_bootstrap_95_ci": [
-            -0.126,
-            -0.11299999999999999
+            -0.025000000000000022,
+            -0.015000000000000013
           ],
           "paired_accuracy_delta_vs_matched_exact_bootstrap_95_ci": [
-            -0.126,
-            -0.11299999999999999
+            -0.025000000000000022,
+            -0.015000000000000013
           ],
           "paired_accuracy_delta_vs_sparse_exact_bootstrap_95_ci": [
-            -0.1299999999999999,
-            -0.119
+            -0.019000000000000017,
+            -0.014000000000000012
           ],
           "parameters": {
             "fan_in": null,
@@ -766,40 +618,40 @@
             100,
             101
           ],
-          "solver_memory_reduction": 0.7855147873217863,
-          "total_memory_reduction_vs_dense_exact": 0.44689563820744727,
-          "total_memory_reduction_vs_matched_exact": 0.44689563820744727,
-          "total_memory_reduction_vs_sparse_exact": 0.0370949898003482
+          "solver_memory_reduction": 0.06792579314767044,
+          "total_memory_reduction_vs_dense_exact": 0.017289922434611027,
+          "total_memory_reduction_vs_matched_exact": 0.017289922434611027,
+          "total_memory_reduction_vs_sparse_exact": -2.7218561654420546
         },
         {
           "all_combined_tradeoff_gates_pass": false,
           "all_original_gates_pass": false,
           "combined_total_50_percent_gate_pass": true,
           "condition": "sparse_nystrom__rank_128__ridge_1",
-          "latency_gate_vs_dense_exact_pass": true,
-          "latency_gate_vs_matched_exact_pass": true,
-          "latency_gate_vs_sparse_exact_pass": true,
+          "latency_gate_vs_dense_exact_pass": false,
+          "latency_gate_vs_matched_exact_pass": false,
+          "latency_gate_vs_sparse_exact_pass": false,
           "matched_exact_reference": "sparse_exact",
-          "mean_final_locked_accuracy": 0.7064999999999999,
-          "mean_paired_accuracy_delta_vs_dense_exact": -0.09600000000000009,
-          "mean_paired_accuracy_delta_vs_matched_exact": -0.10100000000000003,
-          "mean_paired_accuracy_delta_vs_sparse_exact": -0.10100000000000003,
-          "median_throughput_ratio_vs_dense_exact": 2.376629466919836,
-          "median_throughput_ratio_vs_matched_exact": 2.2457357142521084,
-          "median_throughput_ratio_vs_sparse_exact": 2.2457357142521084,
-          "original_solver_gate_pass": true,
-          "original_total_gate_pass": true,
+          "mean_final_locked_accuracy": 0.7685,
+          "mean_paired_accuracy_delta_vs_dense_exact": -0.017000000000000015,
+          "mean_paired_accuracy_delta_vs_matched_exact": -0.013500000000000012,
+          "mean_paired_accuracy_delta_vs_sparse_exact": -0.013500000000000012,
+          "median_throughput_ratio_vs_dense_exact": 0.3267533771372109,
+          "median_throughput_ratio_vs_matched_exact": 0.2904904904078782,
+          "median_throughput_ratio_vs_sparse_exact": 0.2904904904078782,
+          "original_solver_gate_pass": false,
+          "original_total_gate_pass": false,
           "paired_accuracy_delta_vs_dense_exact_bootstrap_95_ci": [
-            -0.10100000000000009,
-            -0.09100000000000008
+            -0.019000000000000017,
+            -0.015000000000000013
           ],
           "paired_accuracy_delta_vs_matched_exact_bootstrap_95_ci": [
-            -0.10499999999999998,
-            -0.09700000000000009
+            -0.02300000000000002,
+            -0.0040000000000000036
           ],
           "paired_accuracy_delta_vs_sparse_exact_bootstrap_95_ci": [
-            -0.10499999999999998,
-            -0.09700000000000009
+            -0.02300000000000002,
+            -0.0040000000000000036
           ],
           "parameters": {
             "fan_in": 8,
@@ -815,94 +667,45 @@
             100,
             101
           ],
-          "solver_memory_reduction": 0.716922351832214,
-          "total_memory_reduction_vs_dense_exact": 0.8334598048495346,
-          "total_memory_reduction_vs_matched_exact": 0.7100684800418255,
-          "total_memory_reduction_vs_sparse_exact": 0.7100684800418255
+          "solver_memory_reduction": -0.2762354449933693,
+          "total_memory_reduction_vs_dense_exact": 0.6656490305253748,
+          "total_memory_reduction_vs_matched_exact": -0.2663004537855267,
+          "total_memory_reduction_vs_sparse_exact": -0.2663004537855267
         },
         {
           "all_combined_tradeoff_gates_pass": false,
           "all_original_gates_pass": false,
           "combined_total_50_percent_gate_pass": true,
-          "condition": "sparse_nystrom__rank_192__ridge_1",
-          "latency_gate_vs_dense_exact_pass": true,
-          "latency_gate_vs_matched_exact_pass": true,
-          "latency_gate_vs_sparse_exact_pass": true,
-          "matched_exact_reference": "sparse_exact",
-          "mean_final_locked_accuracy": 0.736,
-          "mean_paired_accuracy_delta_vs_dense_exact": -0.06650000000000006,
-          "mean_paired_accuracy_delta_vs_matched_exact": -0.07150000000000001,
-          "mean_paired_accuracy_delta_vs_sparse_exact": -0.07150000000000001,
-          "median_throughput_ratio_vs_dense_exact": 1.5455191140303686,
-          "median_throughput_ratio_vs_matched_exact": 1.4603990734557137,
-          "median_throughput_ratio_vs_sparse_exact": 1.4603990734557137,
-          "original_solver_gate_pass": true,
-          "original_total_gate_pass": true,
-          "paired_accuracy_delta_vs_dense_exact_bootstrap_95_ci": [
-            -0.06800000000000006,
-            -0.06500000000000006
-          ],
-          "paired_accuracy_delta_vs_matched_exact_bootstrap_95_ci": [
-            -0.07199999999999995,
-            -0.07100000000000006
-          ],
-          "paired_accuracy_delta_vs_sparse_exact_bootstrap_95_ci": [
-            -0.07199999999999995,
-            -0.07100000000000006
-          ],
-          "parameters": {
-            "fan_in": 8,
-            "feature": "sparse",
-            "rank": 192,
-            "readout": "nystrom",
-            "regularization": 1.0
-          },
-          "quality_gate_vs_dense_exact_pass": false,
-          "quality_gate_vs_matched_exact_pass": false,
-          "quality_gate_vs_sparse_exact_pass": false,
-          "seeds": [
-            100,
-            101
-          ],
-          "solver_memory_reduction": 0.5739460351125251,
-          "total_memory_reduction_vs_dense_exact": 0.7521176158286923,
-          "total_memory_reduction_vs_matched_exact": 0.568459035677775,
-          "total_memory_reduction_vs_sparse_exact": 0.568459035677775
-        },
-        {
-          "all_combined_tradeoff_gates_pass": false,
-          "all_original_gates_pass": false,
-          "combined_total_50_percent_gate_pass": true,
-          "condition": "sparse_nystrom__rank_256__ridge_1",
+          "condition": "sparse_nystrom__rank_32__ridge_1",
           "latency_gate_vs_dense_exact_pass": true,
           "latency_gate_vs_matched_exact_pass": false,
           "latency_gate_vs_sparse_exact_pass": false,
           "matched_exact_reference": "sparse_exact",
-          "mean_final_locked_accuracy": 0.7665,
-          "mean_paired_accuracy_delta_vs_dense_exact": -0.03600000000000003,
-          "mean_paired_accuracy_delta_vs_matched_exact": -0.04099999999999998,
-          "mean_paired_accuracy_delta_vs_sparse_exact": -0.04099999999999998,
-          "median_throughput_ratio_vs_dense_exact": 1.0531097076057365,
-          "median_throughput_ratio_vs_matched_exact": 0.9951092984052317,
-          "median_throughput_ratio_vs_sparse_exact": 0.9951092984052317,
-          "original_solver_gate_pass": false,
+          "mean_final_locked_accuracy": 0.71,
+          "mean_paired_accuracy_delta_vs_dense_exact": -0.07550000000000007,
+          "mean_paired_accuracy_delta_vs_matched_exact": -0.07200000000000006,
+          "mean_paired_accuracy_delta_vs_sparse_exact": -0.07200000000000006,
+          "median_throughput_ratio_vs_dense_exact": 1.0909115812666044,
+          "median_throughput_ratio_vs_matched_exact": 0.9698428919395582,
+          "median_throughput_ratio_vs_sparse_exact": 0.9698428919395582,
+          "original_solver_gate_pass": true,
           "original_total_gate_pass": true,
           "paired_accuracy_delta_vs_dense_exact_bootstrap_95_ci": [
-            -0.04200000000000004,
-            -0.030000000000000027
+            -0.07700000000000007,
+            -0.07400000000000007
           ],
           "paired_accuracy_delta_vs_matched_exact_bootstrap_95_ci": [
-            -0.04800000000000004,
-            -0.03399999999999992
+            -0.07800000000000007,
+            -0.06600000000000006
           ],
           "paired_accuracy_delta_vs_sparse_exact_bootstrap_95_ci": [
-            -0.04800000000000004,
-            -0.03399999999999992
+            -0.07800000000000007,
+            -0.06600000000000006
           ],
           "parameters": {
             "fan_in": 8,
             "feature": "sparse",
-            "rank": 256,
+            "rank": 32,
             "readout": "nystrom",
             "regularization": 1.0
           },
@@ -913,40 +716,40 @@
             100,
             101
           ],
-          "solver_memory_reduction": 0.42324779073877694,
-          "total_memory_reduction_vs_dense_exact": 0.6663822621687496,
-          "total_memory_reduction_vs_matched_exact": 0.41920148630165766,
-          "total_memory_reduction_vs_sparse_exact": 0.41920148630165766
+          "solver_memory_reduction": 0.666710386336146,
+          "total_memory_reduction_vs_dense_exact": 0.9056677263436692,
+          "total_memory_reduction_vs_matched_exact": 0.6427317045757879,
+          "total_memory_reduction_vs_sparse_exact": 0.6427317045757879
         },
         {
           "all_combined_tradeoff_gates_pass": false,
           "all_original_gates_pass": false,
           "combined_total_50_percent_gate_pass": true,
           "condition": "sparse_nystrom__rank_64__ridge_1",
-          "latency_gate_vs_dense_exact_pass": true,
-          "latency_gate_vs_matched_exact_pass": true,
-          "latency_gate_vs_sparse_exact_pass": true,
+          "latency_gate_vs_dense_exact_pass": false,
+          "latency_gate_vs_matched_exact_pass": false,
+          "latency_gate_vs_sparse_exact_pass": false,
           "matched_exact_reference": "sparse_exact",
-          "mean_final_locked_accuracy": 0.651,
-          "mean_paired_accuracy_delta_vs_dense_exact": -0.15150000000000002,
-          "mean_paired_accuracy_delta_vs_matched_exact": -0.15649999999999997,
-          "mean_paired_accuracy_delta_vs_sparse_exact": -0.15649999999999997,
-          "median_throughput_ratio_vs_dense_exact": 3.7347061646387085,
-          "median_throughput_ratio_vs_matched_exact": 3.5290158322561784,
-          "median_throughput_ratio_vs_sparse_exact": 3.5290158322561784,
-          "original_solver_gate_pass": true,
+          "mean_final_locked_accuracy": 0.751,
+          "mean_paired_accuracy_delta_vs_dense_exact": -0.03450000000000003,
+          "mean_paired_accuracy_delta_vs_matched_exact": -0.031000000000000028,
+          "mean_paired_accuracy_delta_vs_sparse_exact": -0.031000000000000028,
+          "median_throughput_ratio_vs_dense_exact": 0.5791854860902291,
+          "median_throughput_ratio_vs_matched_exact": 0.5149078407866768,
+          "median_throughput_ratio_vs_sparse_exact": 0.5149078407866768,
+          "original_solver_gate_pass": false,
           "original_total_gate_pass": true,
           "paired_accuracy_delta_vs_dense_exact_bootstrap_95_ci": [
-            -0.15900000000000003,
-            -0.14400000000000002
+            -0.039000000000000035,
+            -0.030000000000000027
           ],
           "paired_accuracy_delta_vs_matched_exact_bootstrap_95_ci": [
-            -0.16299999999999992,
-            -0.15000000000000002
+            -0.03400000000000003,
+            -0.028000000000000025
           ],
           "paired_accuracy_delta_vs_sparse_exact_bootstrap_95_ci": [
-            -0.16299999999999992,
-            -0.15000000000000002
+            -0.03400000000000003,
+            -0.028000000000000025
           ],
           "parameters": {
             "fan_in": 8,
@@ -962,40 +765,40 @@
             100,
             101
           ],
-          "solver_memory_reduction": 0.8521767408978438,
-          "total_memory_reduction_vs_dense_exact": 0.9104088292312766,
-          "total_memory_reduction_vs_matched_exact": 0.8440298193938093,
-          "total_memory_reduction_vs_sparse_exact": 0.8440298193938093
+          "solver_memory_reduction": 0.38224107025750886,
+          "total_memory_reduction_vs_dense_exact": 0.8332585253302371,
+          "total_memory_reduction_vs_matched_exact": 0.36849351634611327,
+          "total_memory_reduction_vs_sparse_exact": 0.36849351634611327
         },
         {
           "all_combined_tradeoff_gates_pass": false,
           "all_original_gates_pass": false,
           "combined_total_50_percent_gate_pass": true,
           "condition": "sparse_nystrom__rank_96__ridge_1",
-          "latency_gate_vs_dense_exact_pass": true,
-          "latency_gate_vs_matched_exact_pass": true,
-          "latency_gate_vs_sparse_exact_pass": true,
+          "latency_gate_vs_dense_exact_pass": false,
+          "latency_gate_vs_matched_exact_pass": false,
+          "latency_gate_vs_sparse_exact_pass": false,
           "matched_exact_reference": "sparse_exact",
-          "mean_final_locked_accuracy": 0.6855,
-          "mean_paired_accuracy_delta_vs_dense_exact": -0.11700000000000005,
-          "mean_paired_accuracy_delta_vs_matched_exact": -0.122,
-          "mean_paired_accuracy_delta_vs_sparse_exact": -0.122,
-          "median_throughput_ratio_vs_dense_exact": 2.9489244161091053,
-          "median_throughput_ratio_vs_matched_exact": 2.7865113060594906,
-          "median_throughput_ratio_vs_sparse_exact": 2.7865113060594906,
-          "original_solver_gate_pass": true,
-          "original_total_gate_pass": true,
+          "mean_final_locked_accuracy": 0.768,
+          "mean_paired_accuracy_delta_vs_dense_exact": -0.017500000000000016,
+          "mean_paired_accuracy_delta_vs_matched_exact": -0.014000000000000012,
+          "mean_paired_accuracy_delta_vs_sparse_exact": -0.014000000000000012,
+          "median_throughput_ratio_vs_dense_exact": 0.4150191521462815,
+          "median_throughput_ratio_vs_matched_exact": 0.3689605845604151,
+          "median_throughput_ratio_vs_sparse_exact": 0.3689605845604151,
+          "original_solver_gate_pass": false,
+          "original_total_gate_pass": false,
           "paired_accuracy_delta_vs_dense_exact_bootstrap_95_ci": [
-            -0.131,
-            -0.10300000000000009
+            -0.02300000000000002,
+            -0.01200000000000001
           ],
           "paired_accuracy_delta_vs_matched_exact_bootstrap_95_ci": [
-            -0.137,
-            -0.10699999999999998
+            -0.016000000000000014,
+            -0.01200000000000001
           ],
           "paired_accuracy_delta_vs_sparse_exact_bootstrap_95_ci": [
-            -0.137,
-            -0.10699999999999998
+            -0.016000000000000014,
+            -0.01200000000000001
           ],
           "parameters": {
             "fan_in": 8,
@@ -1011,14 +814,14 @@
             100,
             101
           ],
-          "solver_memory_reduction": 0.7855147873217863,
-          "total_memory_reduction_vs_dense_exact": 0.8724834626202932,
-          "total_memory_reduction_vs_matched_exact": 0.7780051628443257,
-          "total_memory_reduction_vs_sparse_exact": 0.7780051628443257
+          "solver_memory_reduction": 0.06792579314767044,
+          "total_memory_reduction_vs_dense_exact": 0.7532522933908057,
+          "total_memory_reduction_vs_matched_exact": 0.06548279689234182,
+          "total_memory_reduction_vs_sparse_exact": 0.06548279689234182
         }
       ],
       "protocol": "class_ordered",
-      "width": 1024
+      "width": 256
     }
   ]
 }
