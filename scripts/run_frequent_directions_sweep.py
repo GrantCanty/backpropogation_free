@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the width-1024 Frequent-Directions development or confirmation study."""
+"""Run a single-width Frequent-Directions development or confirmation study."""
 
 from __future__ import annotations
 
@@ -58,8 +58,10 @@ def _final_accuracy(run: Mapping[str, Any]) -> float:
     return float(run["training"]["checkpoints"][-1]["evaluation_sets"]["all"]["accuracy"])
 
 
-def _references(root: Path, protocol: str, seeds: tuple[int, ...]) -> dict[str, dict[int, dict[str, Any]]]:
-    raw = root / "width_1024" / protocol / "raw"
+def _references(
+    root: Path, width: int, protocol: str, seeds: tuple[int, ...]
+) -> dict[str, dict[int, dict[str, Any]]]:
+    raw = root / f"width_{width}" / protocol / "raw"
     result: dict[str, dict[int, dict[str, Any]]] = {"dense_exact": {}, "sparse_exact": {}}
     for name in result:
         for seed in seeds:
@@ -136,7 +138,7 @@ def select_development_candidate(studies: list[dict[str, Any]]) -> dict[str, Any
 
 
 def _report(document: Mapping[str, Any]) -> str:
-    lines = ["# Frequent-Directions Width-1024 Study", ""]
+    lines = [f"# Frequent-Directions Width-{document['configuration']['width']} Study", ""]
     lines.append(f"Phase: {document['phase']}")
     lines.append("")
     for study in document["studies"]:
@@ -161,7 +163,7 @@ def _run(args: argparse.Namespace, *, phase: str, selected: Mapping[str, Any] | 
         raise ValueError("development and confirmation seeds must be disjoint")
     if phase == "confirmation" and selected is None:
         raise ValueError("confirmation requires a selected development configuration")
-    output = _absolute(args.output) / phase
+    output = _absolute(args.output) / f"width_{args.width}" / phase
     studies: list[dict[str, Any]] = []
     if selected is None:
         parameter_sets = [
@@ -181,6 +183,9 @@ def _run(args: argparse.Namespace, *, phase: str, selected: Mapping[str, Any] | 
             segments, evaluation, current_input = materialize_projection_problem(
                 dataset=args.dataset, seed=seed, protocol=protocol,
                 events_per_segment=args.train_events_per_segment, test_per_class=args.test_per_class,
+                dataset_path=args.dataset_path,
+                allow_download=args.allow_download,
+                dataset_cache=args.dataset_cache,
                 augmentation_copies=args.augmentation_copies,
                 augmentation_max_shift=args.augmentation_max_shift,
                 augmentation_noise_std=args.augmentation_noise_std,
@@ -189,7 +194,7 @@ def _run(args: argparse.Namespace, *, phase: str, selected: Mapping[str, Any] | 
             segments_by_seed[seed] = segments
             evaluation_by_seed[seed] = evaluation
         assert input_size is not None
-        config = ProjectionMemoryConfig(input_size=input_size, hidden_size=1024,
+        config = ProjectionMemoryConfig(input_size=input_size, hidden_size=args.width,
             fan_ins=(args.sparse_fan_in,), ranks=args.ranks,
             nyström_regularizations=args.regularizations,
             development_seeds=args.development_seeds, confirmatory_seeds=args.confirmation_seeds)
@@ -210,10 +215,16 @@ def _run(args: argparse.Namespace, *, phase: str, selected: Mapping[str, Any] | 
             readout_builders={"frequent_directions": _fd_builder},
         )
         studies.append({"protocol": protocol, "artifact_directory": str(output / protocol),
-                        "candidates": _summarize(result["runs"], _references(_absolute(args.reference_results), protocol, seeds))})
+                        "candidates": _summarize(
+                            result["runs"],
+                            _references(_absolute(args.reference_results), args.width, protocol, seeds),
+                        )})
     document: dict[str, Any] = {
-        "schema_version": 1, "experiment": "frequent_directions_width_1024",
-        "phase": phase, "configuration": {"ranks": list(args.ranks), "regularizations": list(args.regularizations),
+        "schema_version": 1, "experiment": "frequent_directions_rank_sweep",
+        "dataset": args.dataset,
+        "download_allowed": args.allow_download,
+        "dataset_cache": str(_absolute(args.dataset_cache)) if args.dataset_cache else None,
+        "phase": phase, "configuration": {"width": args.width, "ranks": list(args.ranks), "regularizations": list(args.regularizations),
         "seeds": list(seeds), "sparse_fan_in": args.sparse_fan_in},
         "reference_results": str(_absolute(args.reference_results)), "studies": studies,
     }
@@ -229,10 +240,14 @@ def _run(args: argparse.Namespace, *, phase: str, selected: Mapping[str, Any] | 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--phase", choices=("development", "confirmation"), default="development")
-    parser.add_argument("--output", type=Path, default=Path("results/frequent_directions_1024"))
+    parser.add_argument("--output", type=Path, default=Path("results/frequent_directions_sweep"))
     parser.add_argument("--reference-results", type=Path, default=Path("results/projection_memory"))
     parser.add_argument("--development-artifact", type=Path)
-    parser.add_argument("--dataset", choices=("digits",), default="digits")
+    parser.add_argument("--dataset", choices=("digits", "fashion_mnist", "npz"), default="digits")
+    parser.add_argument("--dataset-path", type=Path)
+    parser.add_argument("--dataset-cache", type=Path)
+    parser.add_argument("--allow-download", action="store_true")
+    parser.add_argument("--width", type=int, default=1024)
     parser.add_argument("--ranks", type=_ints, default=(64, 128, 192, 256, 320, 384))
     parser.add_argument("--regularizations", type=_floats, default=(0.1, 1.0, 10.0))
     parser.add_argument("--development-seeds", type=_ints, default=(100, 101))
@@ -251,9 +266,16 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.width <= 0:
+        raise SystemExit("--width must be positive")
+    if args.dataset == "npz" and args.dataset_path is None:
+        raise SystemExit("--dataset-path is required for --dataset npz")
     selected = None
     if args.phase == "confirmation":
-        artifact = _absolute(args.development_artifact or (args.output / "development" / "study.json"))
+        artifact = _absolute(
+            args.development_artifact
+            or (args.output / f"width_{args.width}" / "development" / "study.json")
+        )
         development = json.loads(artifact.read_text(encoding="utf-8"))
         selected = development.get("selection", {}).get("selected")
         if selected is None:
