@@ -18,7 +18,6 @@ class FrequentDirectionsRidgeReadout:
     seed: int = 0
 
     def __post_init__(self) -> None:
-        del self.seed
         if self.input_size <= 0 or self.output_size <= 0:
             raise ValueError("input_size and output_size must be positive")
         if not 0 < self.sketch_rank < self.input_size:
@@ -61,6 +60,8 @@ class FrequentDirectionsRidgeReadout:
         values = vector("features", features, self.input_size)
         outcome = vector("target", target, self.output_size)
         vector("prediction", prediction, self.output_size)
+        if not np.all(np.isfinite(values)) or not np.all(np.isfinite(outcome)):
+            raise ValueError("features and target must be finite")
         self.sketch[int(self.filled_rows[0])] = values
         self.filled_rows[0] += 1
         if self.filled_rows[0] == len(self.sketch):
@@ -81,7 +82,16 @@ class FrequentDirectionsRidgeReadout:
 
     @property
     def diagnostics(self) -> dict[str, object]:
-        return {"algorithm":"frequent_directions_ridge", "sketch_rank":self.sketch_rank,
-                "filled_rows":int(self.filled_rows[0]), "compressions":int(self.compression_count[0]),
-                "samples_in_cumulative_statistics":int(self.sample_count[0]),
-                "forgetting_factor":None, "stored_raw_observations":0}
+        return {
+            "algorithm": "frequent_directions_ridge",
+            "sketch_rank": self.sketch_rank,
+            "filled_rows": int(self.filled_rows[0]),
+            "compressions": int(self.compression_count[0]),
+            "samples_in_cumulative_statistics": int(self.sample_count[0]),
+            "last_condition_number": float(self.last_condition_number[0]),
+            "forgetting_factor": 1.0,
+            "gradients": False,
+            "stored_raw_observations": 0,
+            "replay": False,
+            "bounded_state": True,
+        }

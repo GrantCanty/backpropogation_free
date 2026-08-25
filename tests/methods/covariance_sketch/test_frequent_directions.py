@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from methods.covariance_sketch import FrequentDirectionsRidgeReadout
 
@@ -30,4 +31,17 @@ def test_sketch_state_is_bounded_and_finite_after_compressions() -> None:
         readout.update(features, target, prediction)
     assert readout.state_nbytes == initial_bytes
     assert readout.diagnostics["compressions"] > 0
+    assert readout.diagnostics["bounded_state"] is True
+    assert readout.diagnostics["replay"] is False
     assert all(np.all(np.isfinite(array)) for array in readout.persistent_arrays)
+
+
+def test_sketch_rejects_nonfinite_observations() -> None:
+    readout = FrequentDirectionsRidgeReadout(4, 2, sketch_rank=1)
+    with pytest.raises(ValueError, match="finite"):
+        readout.update(np.array([0.0, np.nan, 1.0, 2.0]), np.ones(2), np.zeros(2))
+
+
+def test_sketch_rank_must_fit_feature_coordinates() -> None:
+    with pytest.raises(ValueError, match="sketch_rank"):
+        FrequentDirectionsRidgeReadout(4, 2, sketch_rank=4)

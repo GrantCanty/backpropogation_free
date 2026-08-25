@@ -22,9 +22,20 @@ from experiments.projection_memory_study import (
     materialize_projection_problem,
     run_projection_memory_study,
 )
+from methods.nystrom_memory import NystromCovarianceReadout
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _nystrom_builder(
+    width: int, output_size: int, seed: int, rank: int | None, regularization: float
+) -> NystromCovarianceReadout:
+    if rank is None:
+        raise ValueError("Nyström readouts require rank")
+    return NystromCovarianceReadout(
+        width, output_size, rank=rank, seed=seed, regularization=regularization
+    )
 
 
 def _ints(value: str) -> tuple[int, ...]:
@@ -307,6 +318,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 protocol=protocol,
                 timing_session_id=args.timing_session_id,
                 rotate_condition_order=not args.fixed_condition_order,
+                readout_builders={"nystrom": _nystrom_builder},
             )
             references = _reference_runs(reference, width, protocol, tuple(seeds))
             studies.append(
