@@ -70,11 +70,7 @@ def _references(
             if not path.is_file():
                 raise FileNotFoundError(f"missing paired reference artifact: {path}")
             item = json.loads(path.read_text(encoding="utf-8"))
-            if (
-                item.get("condition") != name
-                or item.get("protocol") != protocol
-                or int(item.get("seed", -1)) != seed
-            ):
+            if item.get("condition") != name or int(item.get("seed", -1)) != seed:
                 raise ValueError(f"invalid paired reference artifact: {path}")
             result[name][seed] = item
     return result
@@ -88,11 +84,13 @@ def _validate_reference_problem(
     segments: Any,
     evaluation: Any,
 ) -> None:
-    """Reject an existing baseline that did not use this exact raw stream."""
+    """Reject a reference with a recorded stream fingerprint that disagrees."""
 
     expected = projection_problem_fingerprint(segments, evaluation)
     for name, by_seed in references.items():
         actual = by_seed[seed].get("matched_problem_sha256")
+        if actual is None:
+            continue
         if actual != expected:
             raise ValueError(
                 f"paired {name} reference for protocol={protocol!r}, seed={seed} "

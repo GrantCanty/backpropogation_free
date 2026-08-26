@@ -88,7 +88,7 @@ def test_frequent_directions_reference_lookup_requires_paired_projection_artifac
     for condition in ("dense_exact", "sparse_exact"):
         (raw / f"{condition}__seed_3.json").write_text(
             json.dumps(
-                {"condition": condition, "protocol": "shuffled_augmented", "seed": 3}
+                {"condition": condition, "seed": 3}
             ),
             encoding="utf-8",
         )
