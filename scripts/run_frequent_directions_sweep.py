@@ -191,6 +191,8 @@ def _run(args: argparse.Namespace, *, phase: str, selected: Mapping[str, Any] | 
         raise ValueError("confirmation requires a selected development configuration")
     output = _absolute(args.output) / f"width_{args.width}" / phase
     reference_root = _absolute(args.reference_results)
+    print(f"writing Frequent-Directions artifacts to {output}", flush=True)
+    print(f"reusing paired exact references from {reference_root}", flush=True)
     references_by_protocol = {
         protocol: _references(reference_root, args.width, protocol, seeds)
         for protocol in ("shuffled_augmented", "class_ordered")
@@ -248,6 +250,9 @@ def _run(args: argparse.Namespace, *, phase: str, selected: Mapping[str, Any] | 
             config=config, seeds=seeds, conditions=conditions,
             segments_by_seed=segments_by_seed, evaluation_by_seed=evaluation_by_seed,
             output=output / protocol, resume=not args.no_resume, protocol=protocol,
+            progress=lambda message, w=args.width, p=protocol: print(
+                f"width={w} protocol={p} {message}", flush=True
+            ),
             timing_session_id=args.timing_session_id,
             rotate_condition_order=not args.fixed_condition_order,
             readout_builders={"frequent_directions": _fd_builder},

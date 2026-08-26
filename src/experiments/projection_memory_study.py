@@ -336,6 +336,8 @@ def run_projection_memory_study(*, config: ProjectionMemoryConfig,
                 if progress:
                     progress(f"resumed condition={name} seed={seed}")
                 continue
+            if progress:
+                progress(f"starting condition={name} seed={seed}")
             run = run_condition(condition=name, config=config, seed=seed,
                                 segments=segments_by_seed[seed],
                                 evaluation_sets=evaluation_by_seed[seed],
