@@ -21,6 +21,7 @@ from continual_core.results import write_json_result
 from experiments.projection_memory_study import (
     ProjectionMemoryConfig,
     materialize_projection_problem,
+    projection_problem_fingerprint,
     run_projection_memory_study,
 )
 from methods.covariance_sketch import FrequentDirectionsRidgeReadout
@@ -69,10 +70,35 @@ def _references(
             if not path.is_file():
                 raise FileNotFoundError(f"missing paired reference artifact: {path}")
             item = json.loads(path.read_text(encoding="utf-8"))
-            if item.get("condition") != name or int(item.get("seed", -1)) != seed:
+            if (
+                item.get("condition") != name
+                or item.get("protocol") != protocol
+                or int(item.get("seed", -1)) != seed
+            ):
                 raise ValueError(f"invalid paired reference artifact: {path}")
             result[name][seed] = item
     return result
+
+
+def _validate_reference_problem(
+    references: Mapping[str, Mapping[int, Mapping[str, Any]]],
+    *,
+    protocol: str,
+    seed: int,
+    segments: Any,
+    evaluation: Any,
+) -> None:
+    """Reject an existing baseline that did not use this exact raw stream."""
+
+    expected = projection_problem_fingerprint(segments, evaluation)
+    for name, by_seed in references.items():
+        actual = by_seed[seed].get("matched_problem_sha256")
+        if actual != expected:
+            raise ValueError(
+                f"paired {name} reference for protocol={protocol!r}, seed={seed} "
+                "does not match the materialized stream; use exact-reference "
+                "artifacts generated with the same dataset and stream settings"
+            )
 
 
 def _condition(feature: str, rank: int, ridge: float) -> str:
@@ -164,6 +190,11 @@ def _run(args: argparse.Namespace, *, phase: str, selected: Mapping[str, Any] | 
     if phase == "confirmation" and selected is None:
         raise ValueError("confirmation requires a selected development configuration")
     output = _absolute(args.output) / f"width_{args.width}" / phase
+    reference_root = _absolute(args.reference_results)
+    references_by_protocol = {
+        protocol: _references(reference_root, args.width, protocol, seeds)
+        for protocol in ("shuffled_augmented", "class_ordered")
+    }
     studies: list[dict[str, Any]] = []
     if selected is None:
         parameter_sets = [
@@ -191,6 +222,13 @@ def _run(args: argparse.Namespace, *, phase: str, selected: Mapping[str, Any] | 
                 augmentation_noise_std=args.augmentation_noise_std,
             )
             input_size = current_input if input_size is None else input_size
+            _validate_reference_problem(
+                references_by_protocol[protocol],
+                protocol=protocol,
+                seed=seed,
+                segments=segments,
+                evaluation=evaluation,
+            )
             segments_by_seed[seed] = segments
             evaluation_by_seed[seed] = evaluation
         assert input_size is not None
@@ -217,7 +255,7 @@ def _run(args: argparse.Namespace, *, phase: str, selected: Mapping[str, Any] | 
         studies.append({"protocol": protocol, "artifact_directory": str(output / protocol),
                         "candidates": _summarize(
                             result["runs"],
-                            _references(_absolute(args.reference_results), args.width, protocol, seeds),
+                            references_by_protocol[protocol],
                         )})
     document: dict[str, Any] = {
         "schema_version": 1, "experiment": "frequent_directions_rank_sweep",
@@ -226,7 +264,7 @@ def _run(args: argparse.Namespace, *, phase: str, selected: Mapping[str, Any] | 
         "dataset_cache": str(_absolute(args.dataset_cache)) if args.dataset_cache else None,
         "phase": phase, "configuration": {"width": args.width, "ranks": list(args.ranks), "regularizations": list(args.regularizations),
         "seeds": list(seeds), "sparse_fan_in": args.sparse_fan_in},
-        "reference_results": str(_absolute(args.reference_results)), "studies": studies,
+        "reference_results": str(reference_root), "studies": studies,
     }
     if phase == "development":
         document["selection"] = select_development_candidate(studies)
@@ -241,7 +279,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--phase", choices=("development", "confirmation"), default="development")
     parser.add_argument("--output", type=Path, default=Path("results/frequent_directions_sweep"))
-    parser.add_argument("--reference-results", type=Path, default=Path("results/projection_memory"))
+    parser.add_argument(
+        "--reference-results",
+        type=Path,
+        default=Path("results/projection_memory"),
+        help=(
+            "projection-memory campaign root containing paired "
+            "width_<width>/<protocol>/raw/{dense,sparse}_exact artifacts"
+        ),
+    )
     parser.add_argument("--development-artifact", type=Path)
     parser.add_argument("--dataset", choices=("digits", "fashion_mnist", "npz"), default="digits")
     parser.add_argument("--dataset-path", type=Path)
