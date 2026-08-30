@@ -42,12 +42,22 @@ def _floats(value: str) -> tuple[float, ...]:
 
 
 def _fd_builder(
-    width: int, output_size: int, seed: int, rank: int | None, regularization: float
+    width: int,
+    output_size: int,
+    seed: int,
+    rank: int | None,
+    regularization: float,
+    optimized: bool = True,
 ) -> FrequentDirectionsRidgeReadout:
     if rank is None:
         raise ValueError("Frequent-Directions readouts require a sketch rank")
     return FrequentDirectionsRidgeReadout(
-        width, output_size, sketch_rank=rank, regularization=regularization, seed=seed
+        width,
+        output_size,
+        sketch_rank=rank,
+        regularization=regularization,
+        seed=seed,
+        optimized=optimized,
     )
 
 
@@ -236,13 +246,34 @@ def _run(args: argparse.Namespace, *, phase: str, selected: Mapping[str, Any] | 
             fan_ins=(args.sparse_fan_in,), ranks=args.ranks,
             nyström_regularizations=args.regularizations,
             development_seeds=args.development_seeds, confirmatory_seeds=args.confirmation_seeds)
-        conditions = {
-            _condition(feature, rank, ridge): {
-                "feature_kind": feature, "readout_kind": "frequent_directions",
-                "fan_in": args.sparse_fan_in if feature == "sparse" else None,
-                "rank": rank, "regularization": ridge,
-            }
-            for feature, rank, ridge in parameter_sets
+        implementations = (
+            ("optimized", True),
+            ("original", False),
+        ) if args.implementation == "both" else [
+            (args.implementation, args.implementation == "optimized")
+        ]
+        conditions = {}
+        for impl_name, is_opt in implementations:
+            suffix = f"_{impl_name}" if args.implementation == "both" else ""
+            readout_key = "frequent_directions" if is_opt else "frequent_directions_original"
+            for feature, rank, ridge in parameter_sets:
+                cond_name = (
+                    f"{feature}_fd{suffix}__rank_{rank}__ridge_{format(ridge, 'g').replace('.', 'p')}"
+                )
+                conditions[cond_name] = {
+                    "feature_kind": feature,
+                    "readout_kind": readout_key,
+                    "fan_in": args.sparse_fan_in if feature == "sparse" else None,
+                    "rank": rank,
+                    "regularization": ridge,
+                }
+        readout_builders = {
+            "frequent_directions": lambda w, o, s, r, reg: _fd_builder(
+                w, o, s, r, reg, optimized=True
+            ),
+            "frequent_directions_original": lambda w, o, s, r, reg: _fd_builder(
+                w, o, s, r, reg, optimized=False
+            ),
         }
         result = run_projection_memory_study(
             config=config, seeds=seeds, conditions=conditions,
@@ -253,7 +284,7 @@ def _run(args: argparse.Namespace, *, phase: str, selected: Mapping[str, Any] | 
             ),
             timing_session_id=args.timing_session_id,
             rotate_condition_order=not args.fixed_condition_order,
-            readout_builders={"frequent_directions": _fd_builder},
+            readout_builders=readout_builders,
         )
         studies.append({"protocol": protocol, "artifact_directory": str(output / protocol),
                         "candidates": _summarize(
@@ -292,6 +323,12 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument("--development-artifact", type=Path)
+    parser.add_argument(
+        "--implementation",
+        choices=("optimized", "original", "both"),
+        default="optimized",
+        help="Choose between optimized throughput, original reference, or both implementations.",
+    )
     parser.add_argument("--dataset", choices=("digits", "fashion_mnist", "npz"), default="digits")
     parser.add_argument("--dataset-path", type=Path)
     parser.add_argument("--dataset-cache", type=Path)
