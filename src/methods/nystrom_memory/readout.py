@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
+import scipy.linalg
 
 from continual_core.protocols import FloatArray
 from continual_core.validation import positive, vector
@@ -77,9 +78,10 @@ class NystromCovarianceReadout:
 
     def _solve_weights(self) -> None:
         # A = D + Y K^-1 Y.T, K = G + eps I.  Woodbury avoids a d x d solve.
-        k = self.probe_covariance + self.epsilon * np.eye(self.rank)
+        k = self.probe_covariance.copy()
+        k.flat[::self.rank + 1] += self.epsilon
         k_inverse_y_t = self._stable_solve(k, self.range_statistic.T)
-        diagonal_nystrom = np.sum(self.range_statistic * k_inverse_y_t.T, axis=1)
+        diagonal_nystrom = np.einsum('ij,ji->i', self.range_statistic, k_inverse_y_t)
         diagonal = np.maximum(self.feature_diagonal - diagonal_nystrom, 0.0)
         diagonal += self.regularization
         inv_d = 1.0 / diagonal
@@ -89,24 +91,28 @@ class NystromCovarianceReadout:
         correction = d_inv_y @ self._stable_solve(
             small, self.range_statistic.T @ rhs
         )
-        solved = rhs - correction
-        self.weights[...] = solved.T
+        self.weights[...] = (rhs - correction).T
 
     @staticmethod
     def _stable_solve(matrix: np.ndarray, right_hand_side: np.ndarray) -> np.ndarray:
         """Solve a theoretically positive-definite system robustly at startup."""
-        matrix = 0.5 * (matrix + matrix.T)
-        scale = max(1.0, float(np.max(np.abs(np.diag(matrix)))))
+        try:
+            c, lower = scipy.linalg.cho_factor(matrix, lower=True, overwrite_a=False, check_finite=False)
+            return scipy.linalg.cho_solve((c, lower), right_hand_side, check_finite=False)
+        except Exception:
+            pass
+        matrix_sym = 0.5 * (matrix + matrix.T)
+        scale = max(1.0, float(np.max(np.abs(np.diag(matrix_sym)))))
         jitter = np.finfo(np.float64).eps * scale
         for _ in range(7):
             try:
-                return np.linalg.solve(matrix, right_hand_side)
+                return np.linalg.solve(matrix_sym, right_hand_side)
             except np.linalg.LinAlgError:
-                matrix = matrix + jitter * np.eye(matrix.shape[0])
+                matrix_sym = matrix_sym + jitter * np.eye(matrix_sym.shape[0])
                 jitter *= 10.0
         # This path is diagnostic insurance for exceptionally ill-conditioned
         # streams; it remains bounded and does not retain any extra state.
-        return np.linalg.lstsq(matrix, right_hand_side, rcond=None)[0]
+        return np.linalg.lstsq(matrix_sym, right_hand_side, rcond=None)[0]
 
     def update(self, features: FloatArray, target: FloatArray, prediction: FloatArray) -> None:
         values = vector("features", features, self.input_size)
