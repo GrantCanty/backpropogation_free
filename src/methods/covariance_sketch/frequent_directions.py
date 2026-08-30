@@ -36,11 +36,30 @@ class FrequentDirectionsRidgeReadout:
         return self.weights @ vector("features", features, self.input_size)
 
     def _compress(self) -> None:
-        _, singular, right = np.linalg.svd(self.sketch, full_matrices=False)
-        delta = float(singular[self.sketch_rank] ** 2)
-        shrunk = np.sqrt(np.maximum(singular[:self.sketch_rank] ** 2 - delta, 0.0))
-        self.sketch.fill(0.0)
-        self.sketch[:self.sketch_rank] = shrunk[:, None] * right[:self.sketch_rank]
+        if 2 * self.sketch_rank <= self.input_size:
+            # Fast Gramian eigendecomposition on (2k x 2k) instead of full SVD on (2k x d)
+            gram = self.sketch @ self.sketch.T
+            eigvals, eigvecs = np.linalg.eigh(gram)
+            top_eigvals = np.maximum(eigvals[::-1], 0.0)
+            singular = np.sqrt(top_eigvals)
+            u = eigvecs[:, ::-1]
+            delta = float(singular[self.sketch_rank] ** 2)
+            shrunk = np.sqrt(np.maximum(singular[:self.sketch_rank] ** 2 - delta, 0.0))
+            valid = singular[:self.sketch_rank] > 1e-12
+            scale = np.zeros(self.sketch_rank)
+            scale[valid] = shrunk[valid] / singular[:self.sketch_rank][valid]
+            self.sketch.fill(0.0)
+            self.sketch[:self.sketch_rank] = scale[:, None] * (u[:, :self.sketch_rank].T @ self.sketch)
+        else:
+            _, singular, right = np.linalg.svd(self.sketch, full_matrices=False)
+            delta = float(singular[self.sketch_rank] ** 2)
+            shrunk = np.sqrt(np.maximum(singular[:self.sketch_rank] ** 2 - delta, 0.0))
+            self.sketch.fill(0.0)
+            self.sketch[:self.sketch_rank] = shrunk[:, None] * right[:self.sketch_rank]
+        if len(shrunk) > 0 and shrunk[-1] > 1e-12:
+            self.last_condition_number[0] = float(shrunk[0] / max(shrunk[-1], 1e-12))
+        else:
+            self.last_condition_number[0] = 1.0
         self.filled_rows[0] = self.sketch_rank
         self.compression_count[0] += 1
 
@@ -54,7 +73,6 @@ class FrequentDirectionsRidgeReadout:
         projected = active @ self.cross_covariance
         correction = np.linalg.solve(reduced, projected)
         self.weights[...] = ((self.cross_covariance - active.T @ correction) / self.regularization).T
-        self.last_condition_number[0] = np.linalg.cond(reduced)
 
     def update(self, features: FloatArray, target: FloatArray, prediction: FloatArray) -> None:
         values = vector("features", features, self.input_size)
