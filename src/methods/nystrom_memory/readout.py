@@ -21,6 +21,7 @@ class NystromCovarianceReadout:
     seed: int = 0
     regularization: float = 1.0
     epsilon: float = 1e-10
+    optimized: bool = True
 
     def __post_init__(self) -> None:
         if self.input_size <= 0 or self.output_size <= 0:
@@ -81,7 +82,10 @@ class NystromCovarianceReadout:
         k = self.probe_covariance.copy()
         k.flat[::self.rank + 1] += self.epsilon
         k_inverse_y_t = self._stable_solve(k, self.range_statistic.T)
-        diagonal_nystrom = np.einsum('ij,ji->i', self.range_statistic, k_inverse_y_t)
+        if self.optimized:
+            diagonal_nystrom = np.einsum('ij,ji->i', self.range_statistic, k_inverse_y_t)
+        else:
+            diagonal_nystrom = np.sum(self.range_statistic * k_inverse_y_t.T, axis=1)
         diagonal = np.maximum(self.feature_diagonal - diagonal_nystrom, 0.0)
         diagonal += self.regularization
         inv_d = 1.0 / diagonal
@@ -93,14 +97,14 @@ class NystromCovarianceReadout:
         )
         self.weights[...] = (rhs - correction).T
 
-    @staticmethod
-    def _stable_solve(matrix: np.ndarray, right_hand_side: np.ndarray) -> np.ndarray:
+    def _stable_solve(self, matrix: np.ndarray, right_hand_side: np.ndarray) -> np.ndarray:
         """Solve a theoretically positive-definite system robustly at startup."""
-        try:
-            c, lower = scipy.linalg.cho_factor(matrix, lower=True, overwrite_a=False, check_finite=False)
-            return scipy.linalg.cho_solve((c, lower), right_hand_side, check_finite=False)
-        except Exception:
-            pass
+        if self.optimized:
+            try:
+                c, lower = scipy.linalg.cho_factor(matrix, lower=True, overwrite_a=False, check_finite=False)
+                return scipy.linalg.cho_solve((c, lower), right_hand_side, check_finite=False)
+            except Exception:
+                pass
         matrix_sym = 0.5 * (matrix + matrix.T)
         scale = max(1.0, float(np.max(np.abs(np.diag(matrix_sym)))))
         jitter = np.finfo(np.float64).eps * scale
@@ -148,4 +152,28 @@ class NystromCovarianceReadout:
             "recruitment": False,
             "forgetting_factor": 1.0,
             "gradients": False,
+            "optimized": self.optimized,
         }
+
+
+class OriginalNystromCovarianceReadout(NystromCovarianceReadout):
+    """Reference unoptimized implementation of Nyström covariance memory."""
+
+    def __init__(
+        self,
+        input_size: int,
+        output_size: int,
+        rank: int = 16,
+        seed: int = 0,
+        regularization: float = 1.0,
+        epsilon: float = 1e-10,
+    ) -> None:
+        super().__init__(
+            input_size=input_size,
+            output_size=output_size,
+            rank=rank,
+            seed=seed,
+            regularization=regularization,
+            epsilon=epsilon,
+            optimized=False,
+        )
