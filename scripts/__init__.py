@@ -1,1 +1,1 @@
-"""Repository-local research campaign entry points."""
+"""Experiment runner and benchmarking CLI scripts."""
