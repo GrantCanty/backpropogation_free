@@ -29,15 +29,23 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _nystrom_builder(
-    width: int, output_size: int, seed: int, rank: int | None, regularization: float
+    width: int,
+    output_size: int,
+    seed: int,
+    rank: int | None,
+    regularization: float,
+    optimized: bool = True,
 ) -> NystromCovarianceReadout:
     if rank is None:
         raise ValueError("Nyström readouts require rank")
     return NystromCovarianceReadout(
-        width, output_size, rank=rank, seed=seed, regularization=regularization
+        width,
+        output_size,
+        rank=rank,
+        seed=seed,
+        regularization=regularization,
+        optimized=optimized,
     )
-
-
 def _ints(value: str) -> tuple[int, ...]:
     values = tuple(int(item) for item in value.split(",") if item.strip())
     if not values:
@@ -287,23 +295,42 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 development_seeds=tuple(seeds),
                 confirmatory_seeds=tuple(),
             )
-            conditions = {
-                _condition_name(feature, rank, ridge): {
-                    "feature_kind": feature,
-                    "readout_kind": "nystrom",
-                    "fan_in": (
-                        min(args.sparse_fan_in, input_size)
-                        if feature == "sparse"
-                        else None
-                    ),
-                    "rank": min(rank, width + 1),
-                    "regularization": ridge,
-                }
-                for feature in ("dense", "sparse")
-                for rank in ranks
-                for ridge in regularizations
-            }
+            implementations = (
+                ("optimized", True),
+                ("original", False),
+            ) if args.implementation == "both" else [
+                (args.implementation, args.implementation == "optimized")
+            ]
+            conditions = {}
+            for impl_name, is_opt in implementations:
+                suffix = f"_{impl_name}" if args.implementation == "both" else ""
+                readout_key = "nystrom" if is_opt else "nystrom_original"
+                for feature in ("dense", "sparse"):
+                    for rank in ranks:
+                        for ridge in regularizations:
+                            cond_name = (
+                                f"{feature}_nystrom{suffix}__rank_{rank}__ridge_{format(ridge, 'g').replace('.', 'p')}"
+                            )
+                            conditions[cond_name] = {
+                                "feature_kind": feature,
+                                "readout_kind": readout_key,
+                                "fan_in": (
+                                    min(args.sparse_fan_in, input_size)
+                                    if feature == "sparse"
+                                    else None
+                                ),
+                                "rank": min(rank, width + 1),
+                                "regularization": ridge,
+                            }
             destination = output / f"width_{width}" / protocol
+            readout_builders = {
+                "nystrom": lambda w, o, s, r, reg: _nystrom_builder(
+                    w, o, s, r, reg, optimized=True
+                ),
+                "nystrom_original": lambda w, o, s, r, reg: _nystrom_builder(
+                    w, o, s, r, reg, optimized=False
+                ),
+            }
             result = run_projection_memory_study(
                 config=config,
                 seeds=seeds,
@@ -318,7 +345,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 protocol=protocol,
                 timing_session_id=args.timing_session_id,
                 rotate_condition_order=not args.fixed_condition_order,
-                readout_builders={"nystrom": _nystrom_builder},
+                readout_builders=readout_builders,
             )
             references = _reference_runs(reference, width, protocol, tuple(seeds))
             studies.append(
@@ -362,6 +389,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--reference-results", type=Path, default=Path("results/projection_memory"))
     parser.add_argument("--widths", type=_ints, default=(1024,))
     parser.add_argument("--ranks", type=_ints, default=(64, 96, 128, 192, 256))
+    parser.add_argument(
+        "--implementation",
+        choices=("optimized", "original", "both"),
+        default="optimized",
+        help="Choose between optimized throughput, original reference, or both implementations.",
+    )
     parser.add_argument("--regularizations", type=_floats, default=(0.1, 1.0, 10.0))
     parser.add_argument("--seeds", type=_ints, default=(100, 101, 102, 103, 104))
     parser.add_argument("--train-events-per-segment", type=int, default=1000)
