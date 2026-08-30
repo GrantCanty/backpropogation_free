@@ -71,6 +71,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=(128,),
         help="One or more ranks to benchmark for Nyström (e.g. 64,128,192)",
     )
+    parser.add_argument(
+        "--implementation",
+        choices=("both", "optimized", "original"),
+        default="both",
+        help="Benchmark 'both' (default) to compare, or selectively benchmark 'optimized' or 'original'.",
+    )
     parser.add_argument("--fd-regularization", type=float, default=10.0)
     parser.add_argument("--nystrom-regularization", type=float, default=1.0)
     parser.add_argument("--sparse-fan-in", type=int, default=8)
@@ -86,13 +92,14 @@ def build_parser() -> argparse.ArgumentParser:
 def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
     fd_str = "_".join(str(r) for r in args.fd_ranks)
     nys_str = "_".join(str(r) for r in args.nystrom_ranks)
-    output = _absolute(args.output) / f"width_{args.width}_fdranks_{fd_str}_nysranks_{nys_str}"
+    impl_suffix = f"_{args.implementation}" if args.implementation != "both" else ""
+    output = _absolute(args.output) / f"width_{args.width}_fdranks_{fd_str}_nysranks_{nys_str}{impl_suffix}"
     output.mkdir(parents=True, exist_ok=True)
     protocols = [p.strip() for p in args.protocols.split(",") if p.strip()]
     seeds = args.seeds
 
     print(f"=== Running Throughput Comparison Benchmark ===")
-    print(f"Dataset: {args.dataset} | Width: {args.width}")
+    print(f"Dataset: {args.dataset} | Width: {args.width} | Implementation: {args.implementation}")
     print(f"FD Ranks: {args.fd_ranks} (ridge={args.fd_regularization}) | Nyström Ranks: {args.nystrom_ranks} (ridge={args.nystrom_regularization})")
     print(f"Seeds: {seeds}")
     print(f"Output directory: {output}")
@@ -122,37 +129,44 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
         }
     }
 
+    include_orig = args.implementation in ("both", "original")
+    include_opt = args.implementation in ("both", "optimized")
+
     for r in args.fd_ranks:
-        conditions[f"original_sparse_fd__rank_{r}"] = {
-            "feature_kind": "sparse",
-            "readout_kind": "frequent_directions_original",
-            "fan_in": args.sparse_fan_in,
-            "rank": r,
-            "regularization": args.fd_regularization,
-        }
-        conditions[f"optimized_sparse_fd__rank_{r}"] = {
-            "feature_kind": "sparse",
-            "readout_kind": "frequent_directions_optimized",
-            "fan_in": args.sparse_fan_in,
-            "rank": r,
-            "regularization": args.fd_regularization,
-        }
+        if include_orig:
+            conditions[f"original_sparse_fd__rank_{r}"] = {
+                "feature_kind": "sparse",
+                "readout_kind": "frequent_directions_original",
+                "fan_in": args.sparse_fan_in,
+                "rank": r,
+                "regularization": args.fd_regularization,
+            }
+        if include_opt:
+            conditions[f"optimized_sparse_fd__rank_{r}"] = {
+                "feature_kind": "sparse",
+                "readout_kind": "frequent_directions_optimized",
+                "fan_in": args.sparse_fan_in,
+                "rank": r,
+                "regularization": args.fd_regularization,
+            }
 
     for r in args.nystrom_ranks:
-        conditions[f"original_sparse_nystrom__rank_{r}"] = {
-            "feature_kind": "sparse",
-            "readout_kind": "nystrom_original",
-            "fan_in": args.sparse_fan_in,
-            "rank": r,
-            "regularization": args.nystrom_regularization,
-        }
-        conditions[f"optimized_sparse_nystrom__rank_{r}"] = {
-            "feature_kind": "sparse",
-            "readout_kind": "nystrom_optimized",
-            "fan_in": args.sparse_fan_in,
-            "rank": r,
-            "regularization": args.nystrom_regularization,
-        }
+        if include_orig:
+            conditions[f"original_sparse_nystrom__rank_{r}"] = {
+                "feature_kind": "sparse",
+                "readout_kind": "nystrom_original",
+                "fan_in": args.sparse_fan_in,
+                "rank": r,
+                "regularization": args.nystrom_regularization,
+            }
+        if include_opt:
+            conditions[f"optimized_sparse_nystrom__rank_{r}"] = {
+                "feature_kind": "sparse",
+                "readout_kind": "nystrom_optimized",
+                "fan_in": args.sparse_fan_in,
+                "rank": r,
+                "regularization": args.nystrom_regularization,
+            }
 
     all_ranks = tuple(set(args.fd_ranks + args.nystrom_ranks))
     all_results = {}
