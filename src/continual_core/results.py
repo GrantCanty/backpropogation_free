@@ -11,6 +11,24 @@ from typing import Any, Mapping
 RESULT_SCHEMA_VERSION = 1
 
 
+def artifact_matches(path: str | Path, *, experiment: str, seed: int,
+                     configuration_hash: str) -> bool:
+    """Return true only for a complete artifact from the same run definition."""
+    candidate = Path(path)
+    if not candidate.is_file():
+        return False
+    try:
+        document = json.loads(candidate.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return (
+        document.get("experiment") == experiment
+        and document.get("seed") == seed
+        and document.get("configuration_hash") == configuration_hash
+        and document.get("completed") is True
+    )
+
+
 def result_envelope(
     *,
     experiment: str,

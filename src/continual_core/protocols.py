@@ -67,6 +67,25 @@ class ReadoutFactory(Protocol):
 
 
 @runtime_checkable
+class FrozenFeatureMap(Protocol):
+    """Public contract for a deterministic representation used by a runner."""
+
+    input_size: int
+    output_size: int
+
+    def transform(self, inputs: FloatArray) -> FloatArray: ...
+
+    @property
+    def persistent_arrays(self) -> tuple[NDArray[Any], ...]: ...
+
+    @property
+    def state_nbytes(self) -> int: ...
+
+    @property
+    def diagnostics(self) -> Mapping[str, object]: ...
+
+
+@runtime_checkable
 class StatefulLearner(Protocol):
     """Public state contract used by evaluation and checkpointing."""
 

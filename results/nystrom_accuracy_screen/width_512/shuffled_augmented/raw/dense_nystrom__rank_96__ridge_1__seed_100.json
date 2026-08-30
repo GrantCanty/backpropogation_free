@@ -1,0 +1,1635 @@
+{
+  "completed": true,
+  "condition": "dense_nystrom__rank_96__ridge_1",
+  "configuration_hash": "3a6c9530d45316f6c4800d61a22bbf6fd52fee34fb8ac486e6a250e68861beab",
+  "continual_learning_metrics": {
+    "average_forgetting": 0.0,
+    "backward_transfer": 0.0,
+    "final_locked_accuracy": 0.749,
+    "final_worst_class_accuracy": 0.45,
+    "focused_segment_count": 0,
+    "mean_events_to_90pct_tail_accuracy": 29.0,
+    "mean_new_class_acquisition_accuracy": 0.0,
+    "mean_new_class_acquisition_gain": 0.0,
+    "mean_old_class_retention_delta": 0.0,
+    "mean_relearning_gain": 0.0,
+    "mean_segment_adaptation_delta": -0.012,
+    "new_class_count": 0,
+    "recurring_visit_count": 0,
+    "sample_efficiency_auc": 0.67363
+  },
+  "diagnostics": {
+    "algorithm": "nystrom_covariance_memory",
+    "forgetting_factor": 1.0,
+    "gradients": false,
+    "rank": 96,
+    "recruitment": false,
+    "samples_in_cumulative_statistics": 10000,
+    "stored_raw_examples": 0
+  },
+  "elapsed_seconds": 84.29917648099945,
+  "experiment": "structured_projection_nystrom_memory",
+  "feature_map_diagnostics": {
+    "algorithm": "dense_frozen_os_elm",
+    "representation": "dense_signed_gaussian_tanh",
+    "stored_raw_examples": 0
+  },
+  "matched_problem_sha256": "e3a326b1cddd5d2d735095d715f5c7111a2de9675078249fc0cdabadbaf7c7f0",
+  "parameters": {
+    "fan_in": null,
+    "feature": "dense",
+    "rank": 96,
+    "readout": "nystrom",
+    "regularization": 1.0
+  },
+  "protocol": "shuffled_augmented",
+  "resources": {
+    "end_to_end_event_latency": {
+      "mean_microseconds": 7339.140809599999,
+      "median_microseconds": 6643.344999999999,
+      "p95_microseconds": 12344.768949999998
+    },
+    "measurement_schema_version": 2,
+    "peak_transient_training_bytes": 5917489,
+    "prediction_latency": {
+      "mean_microseconds": 767.1328718999999,
+      "median_microseconds": 602.9995,
+      "p95_microseconds": 1521.7585
+    },
+    "representation_bytes": 3215360,
+    "solver_bytes": 947888,
+    "solver_update_latency": {
+      "mean_microseconds": 5709.2825524,
+      "median_microseconds": 5109.38,
+      "p95_microseconds": 9926.715299999994
+    },
+    "throughput_events_per_second": 136.2557315553811,
+    "total_persistent_bytes": 4163248,
+    "transform_latency": {
+      "mean_microseconds": 471.1954757750001,
+      "median_microseconds": 389.95899999999995,
+      "samples": 40000
+    },
+    "wall_throughput_including_checkpoints": 118.72137360055025
+  },
+  "runtime_environment": {
+    "backend": "numpy",
+    "batching": "event-wise",
+    "cpu_count": 4,
+    "dtype": "float64",
+    "machine": "x86_64",
+    "numpy_version": "2.0.2",
+    "platform": "Linux-6.12.90+-x86_64-with-glibc2.35",
+    "processor": "x86_64",
+    "python_version": "3.12.13",
+    "thread_environment": {
+      "MKL_NUM_THREADS": null,
+      "NUMEXPR_NUM_THREADS": null,
+      "OMP_NUM_THREADS": null,
+      "OPENBLAS_NUM_THREADS": null,
+      "VECLIB_MAXIMUM_THREADS": null
+    },
+    "timing_session_id": "bb09cfc9ed89"
+  },
+  "schema_version": 1,
+  "seed": 100,
+  "training": {
+    "bounded_state": true,
+    "checkpoint_and_evaluator_seconds": 10.83942327599864,
+    "checkpoints": [
+      {
+        "evaluation_sets": {
+          "all": {
+            "accuracy": 0.705,
+            "mse": 0.0775519253269068,
+            "per_class_accuracy": {
+              "0": 0.64,
+              "1": 0.9,
+              "2": 0.56,
+              "3": 0.78,
+              "4": 0.6,
+              "5": 0.68,
+              "6": 0.44,
+              "7": 0.77,
+              "8": 0.8,
+              "9": 0.88
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.44
+          },
+          "class_0": {
+            "accuracy": 0.64,
+            "mse": 0.08616305124428242,
+            "per_class_accuracy": {
+              "0": 0.64
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.64
+          },
+          "class_1": {
+            "accuracy": 0.9,
+            "mse": 0.053227908795917316,
+            "per_class_accuracy": {
+              "1": 0.9
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.9
+          },
+          "class_2": {
+            "accuracy": 0.56,
+            "mse": 0.08752505564466645,
+            "per_class_accuracy": {
+              "2": 0.56
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.56
+          },
+          "class_3": {
+            "accuracy": 0.78,
+            "mse": 0.07164784210945929,
+            "per_class_accuracy": {
+              "3": 0.78
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.78
+          },
+          "class_4": {
+            "accuracy": 0.6,
+            "mse": 0.08759312627641577,
+            "per_class_accuracy": {
+              "4": 0.6
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.6
+          },
+          "class_5": {
+            "accuracy": 0.68,
+            "mse": 0.0886766412602334,
+            "per_class_accuracy": {
+              "5": 0.68
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.68
+          },
+          "class_6": {
+            "accuracy": 0.44,
+            "mse": 0.10655641812363138,
+            "per_class_accuracy": {
+              "6": 0.44
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.44
+          },
+          "class_7": {
+            "accuracy": 0.77,
+            "mse": 0.06267349161450485,
+            "per_class_accuracy": {
+              "7": 0.77
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.77
+          },
+          "class_8": {
+            "accuracy": 0.8,
+            "mse": 0.07672854054201732,
+            "per_class_accuracy": {
+              "8": 0.8
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.8
+          },
+          "class_9": {
+            "accuracy": 0.88,
+            "mse": 0.05472717765793979,
+            "per_class_accuracy": {
+              "9": 0.88
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.88
+          }
+        },
+        "samples_seen": 1000,
+        "segment": 0
+      },
+      {
+        "evaluation_sets": {
+          "all": {
+            "accuracy": 0.725,
+            "mse": 0.08118809699245282,
+            "per_class_accuracy": {
+              "0": 0.64,
+              "1": 0.91,
+              "2": 0.61,
+              "3": 0.85,
+              "4": 0.58,
+              "5": 0.73,
+              "6": 0.42,
+              "7": 0.82,
+              "8": 0.84,
+              "9": 0.85
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.42
+          },
+          "class_0": {
+            "accuracy": 0.64,
+            "mse": 0.08311250002409637,
+            "per_class_accuracy": {
+              "0": 0.64
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.64
+          },
+          "class_1": {
+            "accuracy": 0.91,
+            "mse": 0.05582228944154373,
+            "per_class_accuracy": {
+              "1": 0.91
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.91
+          },
+          "class_2": {
+            "accuracy": 0.61,
+            "mse": 0.09225950435872753,
+            "per_class_accuracy": {
+              "2": 0.61
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.61
+          },
+          "class_3": {
+            "accuracy": 0.85,
+            "mse": 0.07423774490158797,
+            "per_class_accuracy": {
+              "3": 0.85
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.85
+          },
+          "class_4": {
+            "accuracy": 0.58,
+            "mse": 0.08971689494322196,
+            "per_class_accuracy": {
+              "4": 0.58
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.58
+          },
+          "class_5": {
+            "accuracy": 0.73,
+            "mse": 0.09348895642015523,
+            "per_class_accuracy": {
+              "5": 0.73
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.73
+          },
+          "class_6": {
+            "accuracy": 0.42,
+            "mse": 0.1106158433177368,
+            "per_class_accuracy": {
+              "6": 0.42
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.42
+          },
+          "class_7": {
+            "accuracy": 0.82,
+            "mse": 0.0633020606087861,
+            "per_class_accuracy": {
+              "7": 0.82
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.82
+          },
+          "class_8": {
+            "accuracy": 0.84,
+            "mse": 0.08617861169624835,
+            "per_class_accuracy": {
+              "8": 0.84
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.84
+          },
+          "class_9": {
+            "accuracy": 0.85,
+            "mse": 0.06314656421242423,
+            "per_class_accuracy": {
+              "9": 0.85
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.85
+          }
+        },
+        "samples_seen": 2000,
+        "segment": 1
+      },
+      {
+        "evaluation_sets": {
+          "all": {
+            "accuracy": 0.746,
+            "mse": 0.07733605424725026,
+            "per_class_accuracy": {
+              "0": 0.68,
+              "1": 0.9,
+              "2": 0.59,
+              "3": 0.85,
+              "4": 0.62,
+              "5": 0.76,
+              "6": 0.48,
+              "7": 0.86,
+              "8": 0.87,
+              "9": 0.85
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.48
+          },
+          "class_0": {
+            "accuracy": 0.68,
+            "mse": 0.07489934691959137,
+            "per_class_accuracy": {
+              "0": 0.68
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.68
+          },
+          "class_1": {
+            "accuracy": 0.9,
+            "mse": 0.05503278263852707,
+            "per_class_accuracy": {
+              "1": 0.9
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.9
+          },
+          "class_2": {
+            "accuracy": 0.59,
+            "mse": 0.08857359194243662,
+            "per_class_accuracy": {
+              "2": 0.59
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.59
+          },
+          "class_3": {
+            "accuracy": 0.85,
+            "mse": 0.07566120434801685,
+            "per_class_accuracy": {
+              "3": 0.85
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.85
+          },
+          "class_4": {
+            "accuracy": 0.62,
+            "mse": 0.08390474822317158,
+            "per_class_accuracy": {
+              "4": 0.62
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.62
+          },
+          "class_5": {
+            "accuracy": 0.76,
+            "mse": 0.08775055617288484,
+            "per_class_accuracy": {
+              "5": 0.76
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.76
+          },
+          "class_6": {
+            "accuracy": 0.48,
+            "mse": 0.10225921765386187,
+            "per_class_accuracy": {
+              "6": 0.48
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.48
+          },
+          "class_7": {
+            "accuracy": 0.86,
+            "mse": 0.061011715770754114,
+            "per_class_accuracy": {
+              "7": 0.86
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.86
+          },
+          "class_8": {
+            "accuracy": 0.87,
+            "mse": 0.08371413408205937,
+            "per_class_accuracy": {
+              "8": 0.87
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.87
+          },
+          "class_9": {
+            "accuracy": 0.85,
+            "mse": 0.06055324472119902,
+            "per_class_accuracy": {
+              "9": 0.85
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.85
+          }
+        },
+        "samples_seen": 3000,
+        "segment": 2
+      },
+      {
+        "evaluation_sets": {
+          "all": {
+            "accuracy": 0.736,
+            "mse": 0.07960070853988714,
+            "per_class_accuracy": {
+              "0": 0.7,
+              "1": 0.9,
+              "2": 0.59,
+              "3": 0.85,
+              "4": 0.58,
+              "5": 0.74,
+              "6": 0.43,
+              "7": 0.85,
+              "8": 0.86,
+              "9": 0.86
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.43
+          },
+          "class_0": {
+            "accuracy": 0.7,
+            "mse": 0.07745704803812349,
+            "per_class_accuracy": {
+              "0": 0.7
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.7
+          },
+          "class_1": {
+            "accuracy": 0.9,
+            "mse": 0.05722568295466946,
+            "per_class_accuracy": {
+              "1": 0.9
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.9
+          },
+          "class_2": {
+            "accuracy": 0.59,
+            "mse": 0.09122338442398467,
+            "per_class_accuracy": {
+              "2": 0.59
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.59
+          },
+          "class_3": {
+            "accuracy": 0.85,
+            "mse": 0.07604090926453194,
+            "per_class_accuracy": {
+              "3": 0.85
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.85
+          },
+          "class_4": {
+            "accuracy": 0.58,
+            "mse": 0.08513104637297576,
+            "per_class_accuracy": {
+              "4": 0.58
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.58
+          },
+          "class_5": {
+            "accuracy": 0.74,
+            "mse": 0.08940715250819498,
+            "per_class_accuracy": {
+              "5": 0.74
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.74
+          },
+          "class_6": {
+            "accuracy": 0.43,
+            "mse": 0.10765789598377051,
+            "per_class_accuracy": {
+              "6": 0.43
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.43
+          },
+          "class_7": {
+            "accuracy": 0.85,
+            "mse": 0.06301037791488477,
+            "per_class_accuracy": {
+              "7": 0.85
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.85
+          },
+          "class_8": {
+            "accuracy": 0.86,
+            "mse": 0.08274447178580012,
+            "per_class_accuracy": {
+              "8": 0.86
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.86
+          },
+          "class_9": {
+            "accuracy": 0.86,
+            "mse": 0.06610911615193572,
+            "per_class_accuracy": {
+              "9": 0.86
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.86
+          }
+        },
+        "samples_seen": 4000,
+        "segment": 3
+      },
+      {
+        "evaluation_sets": {
+          "all": {
+            "accuracy": 0.749,
+            "mse": 0.07866146263291897,
+            "per_class_accuracy": {
+              "0": 0.7,
+              "1": 0.9,
+              "2": 0.59,
+              "3": 0.85,
+              "4": 0.63,
+              "5": 0.78,
+              "6": 0.46,
+              "7": 0.84,
+              "8": 0.88,
+              "9": 0.86
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.46
+          },
+          "class_0": {
+            "accuracy": 0.7,
+            "mse": 0.07716409284791761,
+            "per_class_accuracy": {
+              "0": 0.7
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.7
+          },
+          "class_1": {
+            "accuracy": 0.9,
+            "mse": 0.05632739552376454,
+            "per_class_accuracy": {
+              "1": 0.9
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.9
+          },
+          "class_2": {
+            "accuracy": 0.59,
+            "mse": 0.09014909100384946,
+            "per_class_accuracy": {
+              "2": 0.59
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.59
+          },
+          "class_3": {
+            "accuracy": 0.85,
+            "mse": 0.07589038570132427,
+            "per_class_accuracy": {
+              "3": 0.85
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.85
+          },
+          "class_4": {
+            "accuracy": 0.63,
+            "mse": 0.08146879462163058,
+            "per_class_accuracy": {
+              "4": 0.63
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.63
+          },
+          "class_5": {
+            "accuracy": 0.78,
+            "mse": 0.08813348013495498,
+            "per_class_accuracy": {
+              "5": 0.78
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.78
+          },
+          "class_6": {
+            "accuracy": 0.46,
+            "mse": 0.10874794074157128,
+            "per_class_accuracy": {
+              "6": 0.46
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.46
+          },
+          "class_7": {
+            "accuracy": 0.84,
+            "mse": 0.06326339106144,
+            "per_class_accuracy": {
+              "7": 0.84
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.84
+          },
+          "class_8": {
+            "accuracy": 0.88,
+            "mse": 0.08048705759105483,
+            "per_class_accuracy": {
+              "8": 0.88
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.88
+          },
+          "class_9": {
+            "accuracy": 0.86,
+            "mse": 0.06498299710168215,
+            "per_class_accuracy": {
+              "9": 0.86
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.86
+          }
+        },
+        "samples_seen": 5000,
+        "segment": 4
+      },
+      {
+        "evaluation_sets": {
+          "all": {
+            "accuracy": 0.755,
+            "mse": 0.07649530515127734,
+            "per_class_accuracy": {
+              "0": 0.69,
+              "1": 0.91,
+              "2": 0.6,
+              "3": 0.85,
+              "4": 0.62,
+              "5": 0.8,
+              "6": 0.49,
+              "7": 0.85,
+              "8": 0.87,
+              "9": 0.87
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.49
+          },
+          "class_0": {
+            "accuracy": 0.69,
+            "mse": 0.07570989863056005,
+            "per_class_accuracy": {
+              "0": 0.69
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.69
+          },
+          "class_1": {
+            "accuracy": 0.91,
+            "mse": 0.05408626920483864,
+            "per_class_accuracy": {
+              "1": 0.91
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.91
+          },
+          "class_2": {
+            "accuracy": 0.6,
+            "mse": 0.08710761899298909,
+            "per_class_accuracy": {
+              "2": 0.6
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.6
+          },
+          "class_3": {
+            "accuracy": 0.85,
+            "mse": 0.07360770499733425,
+            "per_class_accuracy": {
+              "3": 0.85
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.85
+          },
+          "class_4": {
+            "accuracy": 0.62,
+            "mse": 0.07918143132104728,
+            "per_class_accuracy": {
+              "4": 0.62
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.62
+          },
+          "class_5": {
+            "accuracy": 0.8,
+            "mse": 0.08649585061661794,
+            "per_class_accuracy": {
+              "5": 0.8
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.8
+          },
+          "class_6": {
+            "accuracy": 0.49,
+            "mse": 0.1058387326314113,
+            "per_class_accuracy": {
+              "6": 0.49
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.49
+          },
+          "class_7": {
+            "accuracy": 0.85,
+            "mse": 0.0619254036434901,
+            "per_class_accuracy": {
+              "7": 0.85
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.85
+          },
+          "class_8": {
+            "accuracy": 0.87,
+            "mse": 0.07846996401507368,
+            "per_class_accuracy": {
+              "8": 0.87
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.87
+          },
+          "class_9": {
+            "accuracy": 0.87,
+            "mse": 0.06253017745941106,
+            "per_class_accuracy": {
+              "9": 0.87
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.87
+          }
+        },
+        "samples_seen": 6000,
+        "segment": 5
+      },
+      {
+        "evaluation_sets": {
+          "all": {
+            "accuracy": 0.749,
+            "mse": 0.07515836597077873,
+            "per_class_accuracy": {
+              "0": 0.68,
+              "1": 0.89,
+              "2": 0.62,
+              "3": 0.86,
+              "4": 0.61,
+              "5": 0.78,
+              "6": 0.48,
+              "7": 0.85,
+              "8": 0.86,
+              "9": 0.86
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.48
+          },
+          "class_0": {
+            "accuracy": 0.68,
+            "mse": 0.07406630282091455,
+            "per_class_accuracy": {
+              "0": 0.68
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.68
+          },
+          "class_1": {
+            "accuracy": 0.89,
+            "mse": 0.053649167371821724,
+            "per_class_accuracy": {
+              "1": 0.89
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.89
+          },
+          "class_2": {
+            "accuracy": 0.62,
+            "mse": 0.08469297445174603,
+            "per_class_accuracy": {
+              "2": 0.62
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.62
+          },
+          "class_3": {
+            "accuracy": 0.86,
+            "mse": 0.07140066657455237,
+            "per_class_accuracy": {
+              "3": 0.86
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.86
+          },
+          "class_4": {
+            "accuracy": 0.61,
+            "mse": 0.07801551873430364,
+            "per_class_accuracy": {
+              "4": 0.61
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.61
+          },
+          "class_5": {
+            "accuracy": 0.78,
+            "mse": 0.08226436836970946,
+            "per_class_accuracy": {
+              "5": 0.78
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.78
+          },
+          "class_6": {
+            "accuracy": 0.48,
+            "mse": 0.10529374454911182,
+            "per_class_accuracy": {
+              "6": 0.48
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.48
+          },
+          "class_7": {
+            "accuracy": 0.85,
+            "mse": 0.05982024433140407,
+            "per_class_accuracy": {
+              "7": 0.85
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.85
+          },
+          "class_8": {
+            "accuracy": 0.86,
+            "mse": 0.0782673283364083,
+            "per_class_accuracy": {
+              "8": 0.86
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.86
+          },
+          "class_9": {
+            "accuracy": 0.86,
+            "mse": 0.06411334416781536,
+            "per_class_accuracy": {
+              "9": 0.86
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.86
+          }
+        },
+        "samples_seen": 7000,
+        "segment": 6
+      },
+      {
+        "evaluation_sets": {
+          "all": {
+            "accuracy": 0.747,
+            "mse": 0.07422878732840335,
+            "per_class_accuracy": {
+              "0": 0.68,
+              "1": 0.89,
+              "2": 0.62,
+              "3": 0.85,
+              "4": 0.62,
+              "5": 0.8,
+              "6": 0.45,
+              "7": 0.84,
+              "8": 0.86,
+              "9": 0.86
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.45
+          },
+          "class_0": {
+            "accuracy": 0.68,
+            "mse": 0.07359161651377452,
+            "per_class_accuracy": {
+              "0": 0.68
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.68
+          },
+          "class_1": {
+            "accuracy": 0.89,
+            "mse": 0.05287930233158464,
+            "per_class_accuracy": {
+              "1": 0.89
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.89
+          },
+          "class_2": {
+            "accuracy": 0.62,
+            "mse": 0.08387817276717724,
+            "per_class_accuracy": {
+              "2": 0.62
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.62
+          },
+          "class_3": {
+            "accuracy": 0.85,
+            "mse": 0.07091943548951432,
+            "per_class_accuracy": {
+              "3": 0.85
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.85
+          },
+          "class_4": {
+            "accuracy": 0.62,
+            "mse": 0.07682450466215295,
+            "per_class_accuracy": {
+              "4": 0.62
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.62
+          },
+          "class_5": {
+            "accuracy": 0.8,
+            "mse": 0.08010654297958295,
+            "per_class_accuracy": {
+              "5": 0.8
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.8
+          },
+          "class_6": {
+            "accuracy": 0.45,
+            "mse": 0.10478439131145721,
+            "per_class_accuracy": {
+              "6": 0.45
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.45
+          },
+          "class_7": {
+            "accuracy": 0.84,
+            "mse": 0.05766933224054213,
+            "per_class_accuracy": {
+              "7": 0.84
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.84
+          },
+          "class_8": {
+            "accuracy": 0.86,
+            "mse": 0.07695536500375995,
+            "per_class_accuracy": {
+              "8": 0.86
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.86
+          },
+          "class_9": {
+            "accuracy": 0.86,
+            "mse": 0.06467920998448765,
+            "per_class_accuracy": {
+              "9": 0.86
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.86
+          }
+        },
+        "samples_seen": 8000,
+        "segment": 7
+      },
+      {
+        "evaluation_sets": {
+          "all": {
+            "accuracy": 0.749,
+            "mse": 0.07341192383943107,
+            "per_class_accuracy": {
+              "0": 0.69,
+              "1": 0.89,
+              "2": 0.61,
+              "3": 0.86,
+              "4": 0.65,
+              "5": 0.78,
+              "6": 0.43,
+              "7": 0.85,
+              "8": 0.86,
+              "9": 0.87
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.43
+          },
+          "class_0": {
+            "accuracy": 0.69,
+            "mse": 0.07319432613695917,
+            "per_class_accuracy": {
+              "0": 0.69
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.69
+          },
+          "class_1": {
+            "accuracy": 0.89,
+            "mse": 0.052433865673688525,
+            "per_class_accuracy": {
+              "1": 0.89
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.89
+          },
+          "class_2": {
+            "accuracy": 0.61,
+            "mse": 0.082974682123282,
+            "per_class_accuracy": {
+              "2": 0.61
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.61
+          },
+          "class_3": {
+            "accuracy": 0.86,
+            "mse": 0.07110063897802239,
+            "per_class_accuracy": {
+              "3": 0.86
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.86
+          },
+          "class_4": {
+            "accuracy": 0.65,
+            "mse": 0.07421982080422862,
+            "per_class_accuracy": {
+              "4": 0.65
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.65
+          },
+          "class_5": {
+            "accuracy": 0.78,
+            "mse": 0.07896107464631197,
+            "per_class_accuracy": {
+              "5": 0.78
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.78
+          },
+          "class_6": {
+            "accuracy": 0.43,
+            "mse": 0.10441755200260051,
+            "per_class_accuracy": {
+              "6": 0.43
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.43
+          },
+          "class_7": {
+            "accuracy": 0.85,
+            "mse": 0.057494775148846794,
+            "per_class_accuracy": {
+              "7": 0.85
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.85
+          },
+          "class_8": {
+            "accuracy": 0.86,
+            "mse": 0.07575302496314062,
+            "per_class_accuracy": {
+              "8": 0.86
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.86
+          },
+          "class_9": {
+            "accuracy": 0.87,
+            "mse": 0.06356947791723015,
+            "per_class_accuracy": {
+              "9": 0.87
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.87
+          }
+        },
+        "samples_seen": 9000,
+        "segment": 8
+      },
+      {
+        "evaluation_sets": {
+          "all": {
+            "accuracy": 0.749,
+            "mse": 0.0734955180860225,
+            "per_class_accuracy": {
+              "0": 0.68,
+              "1": 0.89,
+              "2": 0.61,
+              "3": 0.85,
+              "4": 0.65,
+              "5": 0.79,
+              "6": 0.45,
+              "7": 0.85,
+              "8": 0.85,
+              "9": 0.87
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.45
+          },
+          "class_0": {
+            "accuracy": 0.68,
+            "mse": 0.07288370829719286,
+            "per_class_accuracy": {
+              "0": 0.68
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.68
+          },
+          "class_1": {
+            "accuracy": 0.89,
+            "mse": 0.053842462457411484,
+            "per_class_accuracy": {
+              "1": 0.89
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.89
+          },
+          "class_2": {
+            "accuracy": 0.61,
+            "mse": 0.08272925193847903,
+            "per_class_accuracy": {
+              "2": 0.61
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.61
+          },
+          "class_3": {
+            "accuracy": 0.85,
+            "mse": 0.07223889291918549,
+            "per_class_accuracy": {
+              "3": 0.85
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.85
+          },
+          "class_4": {
+            "accuracy": 0.65,
+            "mse": 0.0740263646869573,
+            "per_class_accuracy": {
+              "4": 0.65
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.65
+          },
+          "class_5": {
+            "accuracy": 0.79,
+            "mse": 0.07981957854786921,
+            "per_class_accuracy": {
+              "5": 0.79
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.79
+          },
+          "class_6": {
+            "accuracy": 0.45,
+            "mse": 0.10316437628386517,
+            "per_class_accuracy": {
+              "6": 0.45
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.45
+          },
+          "class_7": {
+            "accuracy": 0.85,
+            "mse": 0.05835097265095337,
+            "per_class_accuracy": {
+              "7": 0.85
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.85
+          },
+          "class_8": {
+            "accuracy": 0.85,
+            "mse": 0.07492170747621772,
+            "per_class_accuracy": {
+              "8": 0.85
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.85
+          },
+          "class_9": {
+            "accuracy": 0.87,
+            "mse": 0.06297786560209341,
+            "per_class_accuracy": {
+              "9": 0.87
+            },
+            "state_bytes": 947888,
+            "transient_state_restored": true,
+            "weights_unchanged": true,
+            "worst_class_accuracy": 0.87
+          }
+        },
+        "samples_seen": 10000,
+        "segment": 9
+      }
+    ],
+    "event_latency": {
+      "mean_microseconds": 7339.140809599999,
+      "median_microseconds": 6643.344999999999,
+      "p95_microseconds": 12344.768949999998
+    },
+    "maximum_absolute_state_value": 4136365.9984073476,
+    "nonfinite_state_values": 0,
+    "online_accuracy": 0.696,
+    "online_mse": 0.08568929817124674,
+    "peak_memory_note": "Python/NumPy traced allocation peak is reported; isolated peak process RSS is unavailable in this in-process comparison",
+    "peak_process_rss_bytes": null,
+    "peak_traced_training_bytes": 5917489,
+    "prediction_latency": {
+      "mean_microseconds": 767.1328718999999,
+      "median_microseconds": 602.9995,
+      "p95_microseconds": 1521.7585
+    },
+    "sample_efficiency": [
+      {
+        "cumulative_online_accuracy": 0.48,
+        "cumulative_online_mse": 0.07611426357413614,
+        "samples": 100
+      },
+      {
+        "cumulative_online_accuracy": 0.61,
+        "cumulative_online_mse": 0.07796461837172038,
+        "samples": 500
+      },
+      {
+        "cumulative_online_accuracy": 0.648,
+        "cumulative_online_mse": 0.0818594952899817,
+        "samples": 1000
+      },
+      {
+        "cumulative_online_accuracy": 0.6704,
+        "cumulative_online_mse": 0.08621601022114415,
+        "samples": 2500
+      },
+      {
+        "cumulative_online_accuracy": 0.6904,
+        "cumulative_online_mse": 0.08704536959001707,
+        "samples": 5000
+      },
+      {
+        "cumulative_online_accuracy": 0.696,
+        "cumulative_online_mse": 0.08568929817124674,
+        "samples": 10000
+      }
+    ],
+    "samples": 10000,
+    "samples_per_second": 118.72137360055025,
+    "seconds": 84.23083137199865,
+    "segments": [
+      {
+        "adaptation_delta": 0.20000000000000007,
+        "adaptation_window": 25,
+        "events_to_90pct_tail_accuracy": 29,
+        "focus_class": null,
+        "head_accuracy": 0.36,
+        "online_accuracy": 0.648,
+        "samples": 1000,
+        "segment": 0,
+        "tail_accuracy": 0.56
+      },
+      {
+        "adaptation_delta": 0.07999999999999996,
+        "adaptation_window": 25,
+        "events_to_90pct_tail_accuracy": 27,
+        "focus_class": null,
+        "head_accuracy": 0.64,
+        "online_accuracy": 0.689,
+        "samples": 1000,
+        "segment": 1,
+        "tail_accuracy": 0.72
+      },
+      {
+        "adaptation_delta": -0.12,
+        "adaptation_window": 25,
+        "events_to_90pct_tail_accuracy": 25,
+        "focus_class": null,
+        "head_accuracy": 0.72,
+        "online_accuracy": 0.688,
+        "samples": 1000,
+        "segment": 2,
+        "tail_accuracy": 0.6
+      },
+      {
+        "adaptation_delta": -0.12,
+        "adaptation_window": 25,
+        "events_to_90pct_tail_accuracy": 25,
+        "focus_class": null,
+        "head_accuracy": 0.72,
+        "online_accuracy": 0.71,
+        "samples": 1000,
+        "segment": 3,
+        "tail_accuracy": 0.6
+      },
+      {
+        "adaptation_delta": -0.07999999999999996,
+        "adaptation_window": 25,
+        "events_to_90pct_tail_accuracy": 25,
+        "focus_class": null,
+        "head_accuracy": 0.64,
+        "online_accuracy": 0.717,
+        "samples": 1000,
+        "segment": 4,
+        "tail_accuracy": 0.56
+      },
+      {
+        "adaptation_delta": -0.039999999999999925,
+        "adaptation_window": 25,
+        "events_to_90pct_tail_accuracy": 25,
+        "focus_class": null,
+        "head_accuracy": 0.72,
+        "online_accuracy": 0.705,
+        "samples": 1000,
+        "segment": 5,
+        "tail_accuracy": 0.68
+      },
+      {
+        "adaptation_delta": 0.039999999999999925,
+        "adaptation_window": 25,
+        "events_to_90pct_tail_accuracy": 25,
+        "focus_class": null,
+        "head_accuracy": 0.68,
+        "online_accuracy": 0.694,
+        "samples": 1000,
+        "segment": 6,
+        "tail_accuracy": 0.72
+      },
+      {
+        "adaptation_delta": -0.36,
+        "adaptation_window": 25,
+        "events_to_90pct_tail_accuracy": 25,
+        "focus_class": null,
+        "head_accuracy": 0.76,
+        "online_accuracy": 0.691,
+        "samples": 1000,
+        "segment": 7,
+        "tail_accuracy": 0.4
+      },
+      {
+        "adaptation_delta": 0.24,
+        "adaptation_window": 25,
+        "events_to_90pct_tail_accuracy": 59,
+        "focus_class": null,
+        "head_accuracy": 0.52,
+        "online_accuracy": 0.696,
+        "samples": 1000,
+        "segment": 8,
+        "tail_accuracy": 0.76
+      },
+      {
+        "adaptation_delta": 0.039999999999999925,
+        "adaptation_window": 25,
+        "events_to_90pct_tail_accuracy": 25,
+        "focus_class": null,
+        "head_accuracy": 0.8,
+        "online_accuracy": 0.722,
+        "samples": 1000,
+        "segment": 9,
+        "tail_accuracy": 0.84
+      }
+    ],
+    "state_bytes_after": 947888,
+    "state_bytes_before": 947888,
+    "stream_samples_per_second": 136.2557315553811,
+    "stream_seconds": 73.391408096,
+    "update_latency": {
+      "mean_microseconds": 6295.239742,
+      "median_microseconds": 5645.3955000000005,
+      "p95_microseconds": 10822.894099999994
+    }
+  }
+}

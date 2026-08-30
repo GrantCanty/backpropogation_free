@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from time import perf_counter
+import tracemalloc
 from typing import Any, Callable, Iterable
 
 import numpy as np
 
 from continual_core.protocols import FloatArray, TaskAdapter
-from continual_core.state import locked_state, state_nbytes
+from continual_core.state import locked_state, persistent_state, state_nbytes
 
 
 TargetEncoder = Callable[[Any], FloatArray]
@@ -34,6 +35,64 @@ class DirectUpdateAdapter:
         if learn:
             learner.update(  # type: ignore[attr-defined]
                 observation, target, prediction
+            )
+
+
+@dataclass(frozen=True)
+class FeatureSubsetAdapter:
+    """Expose a declared feature subset to an otherwise ordinary readout."""
+
+    indices: tuple[int, ...]
+
+    def _select(self, observation: FloatArray) -> FloatArray:
+        return np.asarray(observation, dtype=np.float64)[list(self.indices)]
+
+    def predict(self, learner: object, observation: FloatArray) -> FloatArray:
+        return learner.predict(self._select(observation))  # type: ignore[attr-defined]
+
+    def update(
+        self,
+        learner: object,
+        observation: FloatArray,
+        target: FloatArray,
+        prediction: FloatArray,
+        *,
+        learn: bool,
+    ) -> None:
+        if learn:
+            learner.update(  # type: ignore[attr-defined]
+                self._select(observation), target, prediction
+            )
+
+
+@dataclass
+class FeatureMapAdapter:
+    """Inject a frozen representation before a readout."""
+
+    feature_map: object
+    transform_durations_ns: list[int] = field(default_factory=list)
+    learner_update_durations_ns: list[int] = field(default_factory=list)
+
+    def _transform(self, observation: FloatArray) -> FloatArray:
+        started = perf_counter()
+        features = self.feature_map.transform(observation)  # type: ignore[attr-defined]
+        self.transform_durations_ns.append(int((perf_counter() - started) * 1_000_000_000))
+        return features
+
+    def predict(self, learner: object, observation: FloatArray) -> FloatArray:
+        features = self._transform(observation)
+        return learner.predict(features)  # type: ignore[attr-defined]
+
+    def update(
+        self, learner: object, observation: FloatArray, target: FloatArray,
+        prediction: FloatArray, *, learn: bool,
+    ) -> None:
+        if learn:
+            features = self._transform(observation)
+            started = perf_counter()
+            learner.update(features, target, prediction)  # type: ignore[attr-defined]
+            self.learner_update_durations_ns.append(
+                int((perf_counter() - started) * 1_000_000_000)
             )
 
 
@@ -158,3 +217,184 @@ def evaluate_classification_locked(
         "state_bytes": state_nbytes(learner),
     }
 
+
+def _latency_summary(durations: list[int]) -> dict[str, float]:
+    values = np.asarray(durations, dtype=np.float64) / 1_000.0
+    return {
+        "mean_microseconds": float(np.mean(values)) if len(values) else 0.0,
+        "median_microseconds": float(np.median(values)) if len(values) else 0.0,
+        "p95_microseconds": (
+            float(np.percentile(values, 95)) if len(values) else 0.0
+        ),
+    }
+
+
+def train_classification_profiled(
+    learner: object,
+    segments: list[list[tuple[FloatArray, FloatArray]]],
+    adapter: TaskAdapter,
+    evaluation_sets: dict[
+        str, tuple[list[FloatArray], list[Any]]
+    ],
+    encode_target: TargetEncoder,
+    *,
+    sample_efficiency_steps: Iterable[int] = (),
+) -> dict[str, Any]:
+    """Profile a segmented prequential stream with locked checkpoints.
+
+    This evaluator is deliberately method-neutral. Learners own updates and
+    state; the evaluator owns event order, timing, checkpoints, mutation
+    checks, and resource measurement.
+    """
+
+    total_events = sum(len(segment) for segment in segments)
+    requested_steps = {
+        int(step)
+        for step in sample_efficiency_steps
+        if 0 < int(step) <= total_events
+    }
+    requested_steps.add(total_events)
+    prediction_times: list[int] = []
+    update_times: list[int] = []
+    event_times: list[int] = []
+    correctness: list[float] = []
+    squared_errors: list[float] = []
+    sample_efficiency: list[dict[str, float | int]] = []
+    segment_summaries: list[dict[str, float | int]] = []
+    checkpoints: list[dict[str, Any]] = []
+    state_before = state_nbytes(learner)
+
+    tracing_before = tracemalloc.is_tracing()
+    if not tracing_before:
+        tracemalloc.start()
+    traced_start, _ = tracemalloc.get_traced_memory()
+    tracemalloc.reset_peak()
+    started = perf_counter()
+    samples = 0
+    for segment_index, segment in enumerate(segments):
+        segment_start = len(correctness)
+        for observation, target in segment:
+            event_started = perf_counter()
+            prediction_started = perf_counter()
+            prediction = adapter.predict(learner, observation)
+            prediction_times.append(
+                int((perf_counter() - prediction_started) * 1_000_000_000)
+            )
+            correctness.append(
+                float(np.argmax(prediction) == np.argmax(target))
+            )
+            squared_errors.append(float(np.mean(np.square(target - prediction))))
+            update_started = perf_counter()
+            adapter.update(
+                learner, observation, target, prediction, learn=True
+            )
+            update_times.append(
+                int((perf_counter() - update_started) * 1_000_000_000)
+            )
+            event_times.append(
+                int((perf_counter() - event_started) * 1_000_000_000)
+            )
+            samples += 1
+            if samples in requested_steps:
+                sample_efficiency.append(
+                    {
+                        "samples": samples,
+                        "cumulative_online_accuracy": float(
+                            np.mean(correctness)
+                        ),
+                        "cumulative_online_mse": float(
+                            np.mean(squared_errors)
+                        ),
+                    }
+                )
+        segment_values = correctness[segment_start:]
+        width = max(1, min(25, len(segment_values) // 5))
+        target_classes = {
+            int(np.argmax(target)) for _, target in segment
+        }
+        tail_accuracy = float(np.mean(segment_values[-width:]))
+        recovery_target = 0.9 * tail_accuracy
+        recovery_events = len(segment_values)
+        for stop in range(width, len(segment_values) + 1):
+            if float(np.mean(segment_values[stop - width : stop])) >= recovery_target:
+                recovery_events = stop
+                break
+        segment_summaries.append(
+            {
+                "segment": segment_index,
+                "focus_class": (
+                    next(iter(target_classes)) if len(target_classes) == 1 else None
+                ),
+                "samples": len(segment_values),
+                "online_accuracy": float(np.mean(segment_values)),
+                "head_accuracy": float(np.mean(segment_values[:width])),
+                "tail_accuracy": tail_accuracy,
+                "adaptation_delta": float(
+                    tail_accuracy
+                    - np.mean(segment_values[:width])
+                ),
+                "adaptation_window": width,
+                "events_to_90pct_tail_accuracy": recovery_events,
+            }
+        )
+        checkpoint_scores = {
+            name: evaluate_classification_locked(
+                learner,
+                observations,
+                labels,
+                adapter,
+                encode_target,
+            )
+            for name, (observations, labels) in evaluation_sets.items()
+        }
+        checkpoints.append(
+            {
+                "segment": segment_index,
+                "samples_seen": samples,
+                "evaluation_sets": checkpoint_scores,
+            }
+        )
+    elapsed = perf_counter() - started
+    stream_seconds = sum(event_times) / 1_000_000_000.0
+    _, traced_peak = tracemalloc.get_traced_memory()
+    if not tracing_before:
+        tracemalloc.stop()
+
+    arrays = persistent_state(learner)
+    nonfinite = sum(
+        int(np.size(array) - np.count_nonzero(np.isfinite(array)))
+        for array in arrays.values()
+    )
+    maximum_absolute_state = max(
+        (float(np.max(np.abs(array))) for array in arrays.values() if array.size),
+        default=0.0,
+    )
+    return {
+        "samples": samples,
+        "online_accuracy": float(np.mean(correctness)) if samples else 0.0,
+        "online_mse": float(np.mean(squared_errors)) if samples else 0.0,
+        "seconds": elapsed,
+        "samples_per_second": samples / elapsed if elapsed else float("inf"),
+        "stream_seconds": stream_seconds,
+        "stream_samples_per_second": (
+            samples / stream_seconds if stream_seconds else float("inf")
+        ),
+        "checkpoint_and_evaluator_seconds": max(0.0, elapsed - stream_seconds),
+        "prediction_latency": _latency_summary(prediction_times),
+        "update_latency": _latency_summary(update_times),
+        "event_latency": _latency_summary(event_times),
+        "state_bytes_before": state_before,
+        "state_bytes_after": state_nbytes(learner),
+        "bounded_state": state_before == state_nbytes(learner),
+        "peak_traced_training_bytes": max(0, traced_peak - traced_start),
+        "peak_process_rss_bytes": None,
+        "peak_memory_note": (
+            "Python/NumPy traced allocation peak is reported; isolated peak "
+            "process RSS is unavailable in this in-process comparison"
+        ),
+        "nonfinite_state_values": nonfinite,
+        "maximum_absolute_state_value": maximum_absolute_state,
+        "sample_efficiency": sample_efficiency,
+        "segments": segment_summaries,
+        "checkpoints": checkpoints,
+    }

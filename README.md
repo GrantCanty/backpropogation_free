@@ -39,7 +39,17 @@ PYTHONPATH=src python3 -m experiments --config configs/signal_mvp.json \
   --output results/signal.json --plot results/signal.png
 PYTHONPATH=src python3 -m experiments --config configs/delayed_mvp.json
 PYTHONPATH=src python3 -m experiments --config configs/continual_mvp.json
+PYTHONPATH=src python3 -m experiments \
+  --config configs/solver_comparison_smoke.json \
+  --output results/solver_comparison_smoke
+PYTHONPATH=src python3 scripts/run_solver_campaign.py \
+  --stage confirmatory --confirm-seeds 50 \
+  --output results/solver_campaign
 ```
+
+The three-stage confirmatory, cross-dataset, and feature-width workflow is
+documented in [`docs/SOLVER_CAMPAIGN.md`](docs/SOLVER_CAMPAIGN.md). Dataset
+selection is explicit, and network-backed datasets require `--allow-download`.
 
 Explicit CLI values override their corresponding JSON values. For example,
 add `--steps 500 --seed 3` to run a smaller deterministic signal experiment.
