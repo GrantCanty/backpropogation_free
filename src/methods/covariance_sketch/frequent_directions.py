@@ -16,6 +16,7 @@ class FrequentDirectionsRidgeReadout:
     sketch_rank: int = 16
     regularization: float = 1.0
     seed: int = 0
+    optimized: bool = True
 
     def __post_init__(self) -> None:
         if self.input_size <= 0 or self.output_size <= 0:
@@ -36,7 +37,7 @@ class FrequentDirectionsRidgeReadout:
         return self.weights @ vector("features", features, self.input_size)
 
     def _compress(self) -> None:
-        if 2 * self.sketch_rank <= self.input_size:
+        if self.optimized and 2 * self.sketch_rank <= self.input_size:
             # Fast Gramian eigendecomposition on (2k x 2k) instead of full SVD on (2k x d)
             gram = self.sketch @ self.sketch.T
             eigvals, eigvecs = np.linalg.eigh(gram)
@@ -48,8 +49,9 @@ class FrequentDirectionsRidgeReadout:
             valid = singular[:self.sketch_rank] > 1e-12
             scale = np.zeros(self.sketch_rank)
             scale[valid] = shrunk[valid] / singular[:self.sketch_rank][valid]
+            compressed = scale[:, None] * (u[:, :self.sketch_rank].T @ self.sketch)
             self.sketch.fill(0.0)
-            self.sketch[:self.sketch_rank] = scale[:, None] * (u[:, :self.sketch_rank].T @ self.sketch)
+            self.sketch[:self.sketch_rank] = compressed
         else:
             _, singular, right = np.linalg.svd(self.sketch, full_matrices=False)
             delta = float(singular[self.sketch_rank] ** 2)
@@ -73,6 +75,8 @@ class FrequentDirectionsRidgeReadout:
         projected = active @ self.cross_covariance
         correction = np.linalg.solve(reduced, projected)
         self.weights[...] = ((self.cross_covariance - active.T @ correction) / self.regularization).T
+        if not self.optimized:
+            self.last_condition_number[0] = np.linalg.cond(reduced)
 
     def update(self, features: FloatArray, target: FloatArray, prediction: FloatArray) -> None:
         values = vector("features", features, self.input_size)
@@ -112,4 +116,26 @@ class FrequentDirectionsRidgeReadout:
             "stored_raw_observations": 0,
             "replay": False,
             "bounded_state": True,
+            "optimized": self.optimized,
         }
+
+
+class OriginalFrequentDirectionsRidgeReadout(FrequentDirectionsRidgeReadout):
+    """Reference unoptimized implementation of Frequent-Directions ridge regression."""
+
+    def __init__(
+        self,
+        input_size: int,
+        output_size: int,
+        sketch_rank: int = 16,
+        regularization: float = 1.0,
+        seed: int = 0,
+    ) -> None:
+        super().__init__(
+            input_size=input_size,
+            output_size=output_size,
+            sketch_rank=sketch_rank,
+            regularization=regularization,
+            seed=seed,
+            optimized=False,
+        )
