@@ -32,11 +32,11 @@ from continual_core.metrics import (
 )
 from continual_core.protocols import FloatArray
 from continual_core.results import artifact_matches, write_json_result
-from methods.nystrom_memory import NystromCovarianceReadout
 from methods.structured_projection import SparseSignedFeatureMap
 
 
 MEASUREMENT_SCHEMA_VERSION = 2
+ReadoutBuilder = Callable[[int, int, int, int | None, float], object]
 
 
 @dataclass(frozen=True)
@@ -207,16 +207,15 @@ def feature_map_factory(kind: str, config: ProjectionMemoryConfig, *, seed: int,
 
 def readout_factory(kind: str, width: int, output_size: int, config: ProjectionMemoryConfig,
                     *, seed: int, rank: int | None = None,
-                    regularization: float | None = None) -> object:
+                    regularization: float | None = None,
+                    readout_builders: Mapping[str, ReadoutBuilder] | None = None) -> object:
     ridge = config.regularization if regularization is None else regularization
     if kind == "exact":
         return RLSReadout(width, output_size, seed=seed, regularization=ridge,
                           forgetting_factor=1.0)
-    if kind == "nystrom":
-        if rank is None:
-            raise ValueError("Nyström readouts require rank")
-        return NystromCovarianceReadout(width, output_size, rank=rank, seed=seed,
-                                        regularization=ridge)
+    builders = readout_builders or {}
+    if kind in builders:
+        return builders[kind](width, output_size, seed, rank, ridge)
     raise ValueError(f"unknown readout {kind!r}")
 
 
@@ -228,13 +227,15 @@ def run_condition(*, condition: str, feature_kind: str, readout_kind: str,
                   regularization: float | None = None,
                   protocol: str | None = None,
                   problem_hash: str | None = None,
-                  environment: Mapping[str, Any] | None = None) -> dict[str, Any]:
+                  environment: Mapping[str, Any] | None = None,
+                  readout_builders: Mapping[str, ReadoutBuilder] | None = None) -> dict[str, Any]:
     started = perf_counter()
     feature_map = feature_map_factory(feature_kind, config, seed=seed, fan_in=fan_in)
     width = feature_map.output_size  # type: ignore[attr-defined]
     classes = len(evaluation_sets) - 1
     learner = readout_factory(readout_kind, width, classes, config, seed=seed,
-                              rank=rank, regularization=regularization)
+                              rank=rank, regularization=regularization,
+                              readout_builders=readout_builders)
     adapter = FeatureMapAdapter(feature_map)
     target = lambda label: np.eye(classes, dtype=np.float64)[int(label)]
     training = train_classification_profiled(
@@ -307,7 +308,8 @@ def run_projection_memory_study(*, config: ProjectionMemoryConfig,
                                 progress: Callable[[str], None] | None = None,
                                 protocol: str | None = None,
                                 timing_session_id: str | None = None,
-                                rotate_condition_order: bool = True) -> dict[str, Any]:
+                                rotate_condition_order: bool = True,
+                                readout_builders: Mapping[str, ReadoutBuilder] | None = None) -> dict[str, Any]:
     """Run paired conditions and optionally persist one atomic artifact per seed."""
     root = Path(output) if output is not None else None
     runs: list[dict[str, Any]] = []
@@ -334,11 +336,14 @@ def run_projection_memory_study(*, config: ProjectionMemoryConfig,
                 if progress:
                     progress(f"resumed condition={name} seed={seed}")
                 continue
+            if progress:
+                progress(f"starting condition={name} seed={seed}")
             run = run_condition(condition=name, config=config, seed=seed,
                                 segments=segments_by_seed[seed],
                                 evaluation_sets=evaluation_by_seed[seed],
                                 protocol=protocol, problem_hash=problem_hash,
-                                environment=environment, **parameters)
+                                environment=environment,
+                                readout_builders=readout_builders, **parameters)
             if path:
                 write_json_result(run, path)
             runs.append(run)
