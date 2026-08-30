@@ -1,5 +1,9 @@
-"""Bounded-state Frequent-Directions covariance baseline candidate."""
+from .frequent_directions import (
+    FrequentDirectionsRidgeReadout,
+    OriginalFrequentDirectionsRidgeReadout,
+)
 
-from .frequent_directions import FrequentDirectionsRidgeReadout
-
-__all__ = ["FrequentDirectionsRidgeReadout"]
+__all__ = [
+    "FrequentDirectionsRidgeReadout",
+    "OriginalFrequentDirectionsRidgeReadout",
+]
